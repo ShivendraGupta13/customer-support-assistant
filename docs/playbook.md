@@ -17,7 +17,7 @@ This is the manual test script for every feature built in this project. For each
 | D2 | Sequential Workflow runtime path (investigation pipeline) |
 | D3 | Parallel Workflow runtime path (fan-out/fan-in investigation) |
 | D4 | Dynamic Routing / Coordinator–Specialist delegation runtime path |
-| D5 | Human-in-the-Loop (`LongRunningFunctionTool`) runtime path |
+| D5 | Human-in-the-Loop (`ToolConfirmation` dialog) runtime path |
 | D6 | Loop Agent refinement runtime path |
 | D7 | RAG retrieval runtime path (policy Q&A with citations) |
 | D8 | Memory architecture data flow (short/long-term/episodic/semantic) |
@@ -93,15 +93,17 @@ This is the manual test script for every feature built in this project. For each
 
 ## 5. Human-in-the-Loop — `demo-hitl-approval`
 
-**Covers**: `LongRunningFunctionTool`, human approval, error recovery on reject. **Architecture**: D5, D9, D10.
+**Covers**: `ToolConfirmation` (human approval dialog in Dev UI), error recovery on reject. **Architecture**: D5, D9, D10.
 
-> **Resume path:** ADK docs currently do **not** support completing a long-running tool from the Web UI. After step 1 pauses, approve/reject by posting a `functionResponse` to `AdkWebServer`'s `/run` or `/run_sse` (include `invocation_id` if Resume is enabled). Architecture spike pastes the exact 1.9.x `curl` here; until then, treat "Approve" / "Reject" as that REST call, not a UI button.
+> **Live demo:** When the refund exceeds the threshold, the ADK Web UI shows an **approval dialog** — click Approve or Reject ([ToolConfirmation docs](https://adk.dev/tools-custom/confirmation/)). No Postman. Automated tests use `InMemoryRunner` and inject the confirmation `FunctionResponse` in code.
 
-| Step | Query | Expected |
+| Step | Query / action | Expected |
 |---|---|---|
-| 1 | *"Process a refund for ORD-5010 (USD 350)."* | Amount exceeds the USD 200 auto-approval threshold, so the agent calls the approval tool. The turn ends **pending** (paused long-running tool, not a final refund) rather than immediately refunding. |
-| 2 | POST approve `functionResponse` (REST — see note) | Agent resumes and confirms the refund was processed. |
-| 3 | Repeat step 1, then POST reject | Agent resumes and informs the customer the refund was **not** approved, with no side effect (no refund tool; H2 order/payment unchanged). |
+| 1 | *"Process a refund for ORD-5010 (USD 350)."* | Agent requests confirmation (dialog or `adk_request_confirmation` event). Turn does **not** complete with a refund yet. |
+| 2 | Click **Approve** in the Web UI dialog | Agent continues and confirms refund processed. |
+| 3 | Repeat step 1, click **Reject** | Agent informs customer refund was not approved; H2 shows no refund side effect. |
+
+**JUnit (Layer 3):** same queries via `InMemoryRunner`; assert confirmation event fires, then programmatic `confirmed: true/false`; reject path must never call the refund tool.
 
 ## 6. Loop Agent Refinement — `demo-loop-refinement`
 
@@ -164,8 +166,8 @@ Do **not** debug by editing a prompt in the Web UI and trying again. Tests are l
 |---|---|---|---|
 | 0 Tool | `mvn test -Dtest=ToolEvalTest` | No | Seed lookups, fraud score, PII mask — exact values. |
 | 1 Retrieval | `mvn test -Dtest=RetrievalEvalTest` | No | Step 7.3 query: hybrid ranks the loyalty `NW-SHIP-EXC-04` chunk #1; dense-only does not. Step 7.2 query: chunks from both shipping and refund docs. |
-| 2 Prompt | `mvn test -Dtest=PromptEvalTest` | Yes, temperature 0, **canned** chunks/tool JSON | `must_contain` / `must_not_contain` / citation pattern. Frozen I/O — if this passes, the prompt is not the bug. |
-| 3 Agent | `mvn test -Dtest=EvaluationHarnessTest` | Yes | One case per Playbook scenario: expected tool name + key args, seed facts in the reply, HITL pending/reject side-effect. **Not** exact prose. |
+| 2 Prompt | `mvn test -Dtest=PromptEvalTest` | Yes, canned context only | Reply wording/citations given **fake** tool JSON or chunks. **Does not test tool execution.** |
+| 3 Agent | `mvn test -Dtest=EvaluationHarnessTest` | Yes | **Event stream:** which tools ran, in what order, routing target, confirmation pause. Plus `must_contain` facts. One case per Playbook scenario. |
 
 If a Playbook step fails in the UI: open Langfuse, then run the **lowest** layer that could explain the trace (missing tool → 0; wrong chunk → 1; right context, wrong wording → 2; graph/routing → 3). Change prompts only after Layer 2 has a failing fixture, then make that fixture pass.
 
@@ -173,13 +175,15 @@ If a Playbook step fails in the UI: open Langfuse, then run the **lowest** layer
 
 | Agent | Frozen input | Must hold |
 |---|---|---|
-| `demo-single-agent` | Tool JSON for `ORD-5001` status DELAYED | Contains DELAYED and `ORD-5001`; does not invent a carrier or amount. |
+| `demo-single-agent` | **Fake** tool JSON: `ORD-5001` → DELAYED | Reply mentions DELAYED; does not invent carrier/amount. *(Does not test whether the real tool was invoked — that's Layer 3.)* |
 | `demo-rag-policy` | Refund-window chunk + citation metadata | States the window **from the fixture** and cites `refund-policy.md` + section heading. |
 | `demo-rag-policy` | Loyalty courtesy chunk for `NW-SHIP-EXC-04` | Says the exception applies to `NW-HP-1001`; cites loyalty, not shipping. |
 | `demo-dynamic-routing` | Coordinator instruction + "I want a refund for ORD-5001." | Transfer/delegate target is billing, not shipping. |
-| `demo-hitl-approval` | Order JSON amount 350 vs threshold 200 | Calls the approval tool; does not call refund. |
+| `demo-hitl-approval` | **Fake** order JSON: amount 350, threshold 200 | Model output requests approval; does not claim refund completed. *(Real confirmation flow tested in Layer 3 via Runner events.)* |
 
-Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — `adk-java#300`). Golden JSON should still resemble Python eval-set fields (`query`, `expected_tool_use`, `must_contain`) so a later runner swap is cheap.
+**Workflow tests (Layer 3)** use `InMemoryRunner` and inspect events — e.g. sequential stages in order, parallel tools without strict sequencing, `transfer` to billing vs shipping, confirmation before refund. See `spec.md` → Testing Strategy → Workflow testing.
+
+Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — [adk-java#300](https://github.com/google/adk-java/issues/300)). Teams use JUnit + `InMemoryRunner` + event assertions instead; golden JSON mirrors Python eval-set fields for a future runner swap.
 
 ## Traceability: POC topic → Playbook section → Architecture diagram
 
@@ -204,4 +208,4 @@ Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — `
 **Note**: "Search Tool" and "MCP Tools" from the POC checklist have no dedicated scenario yet — MCP Tools support in `google-adk` for Java needs to be confirmed during Architecture research before we commit to a scenario; if unsupported/immature, it will be explicitly descoped rather than silently dropped.
 
 ---
-**Approval needed on this document before `architecture.md` is written.** In particular, confirm: canonical seed data (including the hybrid trap clause), per-scenario expectations (especially §7 step 3 and HITL-via-REST), layered eval, and the Search/MCP descoping note.
+**Approval needed on this document before `architecture.md` is written.** In particular, confirm: canonical seed data (including the hybrid trap clause), per-scenario expectations (especially §7 step 3 and §5 HITL via Web UI dialog), layered eval, and the Search/MCP descoping note.

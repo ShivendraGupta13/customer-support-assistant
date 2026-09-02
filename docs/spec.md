@@ -54,7 +54,7 @@ This request bundles many independently testable capabilities. Below is the prop
 | `demo-sequential-investigation` | `SequentialAgent`: gather order+payment+shipment → check policy (RAG) → draft resolution | Sequential workflow, Agent composition via `outputKey` chaining, Retry & error recovery on tool failure | `demo-single-agent`'s shared infra |
 | `demo-parallel-investigation` | `ParallelAgent` fan-out (payment / shipment / fraud checks) → aggregator | Parallel workflow, fan-out/fan-in composition | same infra |
 | `demo-dynamic-routing` | Coordinator `LlmAgent` delegating to specialist sub-agents (billing / shipping / account) based on query classification | Dynamic routing, Coordinator/Specialist pattern, Agent delegation, Conditional branching, Nested workflows | same infra |
-| `demo-hitl-approval` | `LlmAgent` + `LongRunningFunctionTool` pausing for human approval on refunds above a threshold | Human-in-the-loop, Retry & error recovery (approve/reject paths) | same infra |
+| `demo-hitl-approval` | `LlmAgent` + **`ToolConfirmation`** on refund above threshold (Web UI dialog for live demo) | Human-in-the-loop, Retry & error recovery (approve/reject paths) | same infra |
 | `demo-loop-refinement` | `LoopAgent`: draft customer-facing reply → critique → refine until policy-compliant or `max_iterations` | (Loop workflow, iterative self-correction — implied by "LoopAgent" in your ask) | same infra |
 | `demo-rag-policy` | Agent answering policy questions using `rag-index`, with citations | RAG end-to-end, Semantic memory | `rag-index` |
 | `demo-memory-personalization` | Agent recalling long-term preferences + episodic past-ticket history across sessions | Long-term memory, Episodic memory, cross-session recall | `memory-services` |
@@ -154,11 +154,37 @@ The failure mode to avoid: something looks wrong in the UI → tweak the system 
 |---|---|---|---|---|
 | 0. Tool eval | Domain tools + guardrail helpers return the right records / masks | No | `mvn test -Dtest=ToolEvalTest` | Exact values from seed data (order status, fraud score, PII masked). |
 | 1. Retrieval eval | Chunking, citation metadata, dense vs hybrid ranking | No | `mvn test -Dtest=RetrievalEvalTest` | Hybrid query ranks the `NW-SHIP-EXC-04` chunk #1; dense-only does not; multi-policy query returns chunks from both named files. |
-| 2. Prompt eval | The instruction, given **frozen** retrieved chunks / tool JSON, produces the required facts + citation shape | Yes (`@Tag("llm")`, temperature 0) | `mvn test -Dtest=PromptEvalTest` | `must_contain` / `must_not_contain` / citation regex. **Never** exact full-answer string match. |
-| 3. Agent eval | Full `Runner` loop: routing, tool trajectory, HITL pause, RAG answer using live retrieval | Yes (`@Tag("llm")`) | `mvn test -Dtest=EvaluationHarnessTest` | Expected tool name + key args; must-contain seed facts; HITL pending vs reject side-effect. One case per Playbook scenario. |
+| 2. Prompt eval | Given **frozen** context (canned tool JSON or policy chunks), does the **wording** of the reply match requirements? | Yes (`@Tag("llm")`, temperature 0) | `mvn test -Dtest=PromptEvalTest` | `must_contain` / `must_not_contain` / citation regex. **Does not invoke real tools or retrieval.** |
+| 3. Agent eval | Full `Runner` loop: did the agent **choose** the right tools/routes/workflow steps, and produce acceptable output? | Yes (`@Tag("llm")`) | `mvn test -Dtest=EvaluationHarnessTest` | **Event-stream assertions** (tool name + args, transfer target, confirmation pause, sub-agent order) + `must_contain` seed facts. One case per Playbook scenario. |
 | 4. Manual Playbook | UX, Langfuse span shape, provider switch | Yes, human | Playbook steps in the Web UI | Trace shape matches the Architecture diagram cited by that scenario. |
 
 **Prompt eval fixtures** live next to the prompt files (same version suffix, e.g. `demo-rag-policy.v1.md` + `demo-rag-policy.v1.eval.json`). Each case supplies: system prompt file id, canned user message, canned context (chunks or tool results), `must_contain`, `must_not_contain`, optional citation pattern. The model is called **once per case** with that frozen input — retrieval and tools are not in the path. If prompt eval passes and agent eval fails, the prompt is not the bug.
+
+### What each layer tests (and what it does not)
+
+| Question | Answer |
+|---|---|
+| Does the tool **work** when called directly? | **Layer 0** — call `orderLookup("ORD-5001")`, assert `DELAYED`. No prompt, no agent. |
+| Does the agent **decide to call** the tool and pass the right args? | **Layer 3** — run `InMemoryRunner`, assert events contain `tool_call` for `order_lookup` with `order_id=ORD-5001`. |
+| Does the prompt produce good text **if the tool already returned the right JSON**? | **Layer 2** — inject fake tool JSON `{"status":"DELAYED"}`, ask model to answer; assert reply mentions DELAYED. **This does not prove the tool was called.** |
+| Does sequential / parallel / routing **topology** work? | **Layer 3** — assert **event order and shape** (see Workflow testing below). Optional **Layer 3b** with `TestLlm` for fully deterministic graph tests without Ollama. |
+
+### Workflow testing (Layer 3)
+
+Workflows are tested by running the real agent graph through `InMemoryRunner` (or `Runner` + Ollama for `@Tag("llm")`) and asserting on the **event stream**, not on exact final prose:
+
+| Playbook scenario | Workflow assertion (examples) |
+|---|---|
+| §1 Single agent | Events include `tool_call` → `order_lookup`; final text contains `DELAYED`. |
+| §2 Sequential | Sub-agent / stage events appear in order: gather → policy (RAG tool or retrieval span) → draft; later stage input references prior `outputKey` in session state. |
+| §3 Parallel | Payment, shipment, fraud tool calls appear in the same turn without strict A→B→C ordering; aggregator event follows all three. |
+| §4 Dynamic routing | Event shows `transfer` (or equivalent) to **billing** specialist for refund query, **shipping** for delay query. |
+| §5 HITL | Event shows `adk_request_confirmation` (or pending confirmation) before refund; after programmatic `confirmed: true`, refund tool runs; after `confirmed: false`, refund tool never runs and H2 unchanged. **Live demo:** same flow via Web UI dialog, not Postman. |
+| §6 Loop | ≥2 draft/critique iterations in events, then exit; forced-fail case hits `max_iterations`. |
+| §7 RAG | Retrieval tool or RAG span returns chunks from expected `source_path`; hybrid case cites loyalty doc for code query. |
+| §8 Memory | Memory-load tool or DB read occurs without those facts in the user message; reply cites `TCK-3001` / email preference. |
+
+For flaky routing tests, use `TestLlm` to return a fixed `transfer_to_agent` response so Layer 3 can verify graph wiring without depending on qwen2.5:7b mood.
 
 **When a Playbook step fails in the UI, do not edit the prompt first.** Check Langfuse: missing tool span → Layer 0/3; wrong chunk in the retrieved-context span → Layer 1; right chunks/tools but wrong wording/citation → Layer 2. Only then change the prompt file and re-run Layer 2, then Layer 3.
 
@@ -228,19 +254,38 @@ ADK's Java model types (`Gemini`, `Claude`, `OpenAiCompatibleLlm`) are chat/comp
 
 ### 3. ADK Java evaluation API vs custom JUnit harness
 
-**Propose: keep the custom JUnit harness. Do not depend on Java `AgentEvaluator` or the Web UI Eval tab.**
+**Propose: keep a custom JUnit harness. Do not depend on Java `AgentEvaluator` or the Web UI Eval tab.**
 
-Python ADK has `AgentEvaluator` and `adk eval` ([docs](https://google.github.io/adk-docs/evaluate/)). Java's matching Web UI/REST eval endpoints are **unimplemented** as of [adk-java#300](https://github.com/google/adk-java/issues/300) (still open). Building on a stub UI would recreate the prompt-tweak loop this spec is trying to prevent.
+Python ADK has `AgentEvaluator` and `adk eval` ([docs](https://google.github.io/adk-docs/evaluate/)). Java's matching Web UI/REST eval endpoints are **unimplemented** as of [adk-java#300](https://github.com/google/adk-java/issues/300) (still open). The Eval tab in `AdkWebServer` cannot save or run eval sets today.
 
-Shape our golden JSON like Python eval sets (`query`, `expected_tool_use`, `must_contain`) so a later Java port is a runner swap, not a dataset rewrite. Revisit only if a stable Java evaluator ships and can express Layers 0–3.
+**How Java developers actually test agents today** (this is what our harness will do — same patterns ADK itself uses):
 
-### 4. Resuming a paused `LongRunningFunctionTool` through `AdkWebServer`
+| Pattern | What it is | Used for |
+|---|---|---|
+| `InMemoryRunner` + `InMemorySessionService` | Run an agent graph in-process, no web server | All automated agent/workflow tests |
+| `TestLlm` (ADK test utility) | Fake LLM with scripted responses | Deterministic routing / tool-choice tests without Ollama |
+| Real `Runner` + local Ollama | Full integration | `@Tag("llm")` agent eval against real model |
+| Event-stream assertions | Inspect `runner.runAsync(...)` events for `tool_call`, `transfer`, `adk_request_confirmation` | Tool trajectory, workflow order, HITL pause, routing target |
+| Direct tool unit tests | Call Java tool methods / repos | Layer 0 — no agent, no LLM |
 
-**Propose: Playbook HITL uses REST, not a Web UI click. Architecture spike records the exact 1.9.x payload.**
+Nobody serious waits for the Java Eval UI. They write JUnit tests that spin up `InMemoryRunner`, feed a query, and assert on the **event list** (which tools fired, in what order, with what args) plus optional `must_contain` on the final text. Python teams use `AgentEvaluator`; Java teams use `Runner` + assertions until parity ships.
 
-Official ADK docs for resume state that resuming from the **Web UI or CLI is not currently supported**; the client continues the paused run by sending a `functionResponse` on `/run` or `/run_sse` (and `invocation_id` if the Resume feature is enabled). That matches HITL: the tool returns pending, the human decides, the client posts approve/reject.
+Our golden JSON mirrors Python eval-set shape (`query`, `expected_tool_use`, `must_contain`) so a future Java `AgentEvaluator` is a runner swap. Revisit only if that API ships and covers Layers 0–3.
 
-The Playbook already describes the *behavior* (pending → approve processes refund; reject leaves H2 unchanged). Architecture fills in one copy-pasteable `curl` (path, headers, JSON). Until that spike, do not write "click Approve in the UI" as if it existed.
+### 4. Human approval (HITL) — demo UX vs automated tests
+
+**Two different ADK mechanisms — do not conflate them:**
+
+| Mechanism | Demo UX | Automated test |
+|---|---|---|
+| **`ToolConfirmation`** (`FunctionTool` with `requireConfirmation`, or `toolContext.requestConfirmation()`) | **Web UI shows an approval dialog** ([ADK confirmation docs](https://adk.dev/tools-custom/confirmation/), [Java 1.0 HITL blog](https://developers.googleblog.com/announcing-adk-for-java-100-building-the-future-of-ai-agents-in-java/)). User clicks Approve/Reject in the Dev UI. | `InMemoryRunner`: programmatically send the `adk_request_confirmation` `FunctionResponse` with `confirmed: true/false` — no Postman, no browser. |
+| **`LongRunningFunctionTool`** | Pauses until the **client** posts a `functionResponse` on `/run` or `/run_sse`. General **workflow Resume** from Web UI/CLI is [not supported](https://google.github.io/adk-docs/runtime/resume/). | Same REST shape, or Runner API in tests. |
+
+**Propose for this POC:** implement HITL with **`ToolConfirmation` on the refund tool**, not `LongRunningFunctionTool`. That gives a clean live-demo path (type query → dialog appears → click Approve) and a clean test path (`InMemoryRunner` + synthetic confirmation response). Postman is **not** part of the Playbook demo flow.
+
+`LongRunningFunctionTool` remains a documented alternative in Architecture if we need to show async external jobs; it is not the primary HITL demo unless the 1.9.x spike proves `ToolConfirmation` cannot express "refund above threshold."
+
+**What open question #4 is supposed to do:** define how a *paused* agent run continues after human input — which event to send back, and whether the UI or only REST can send it. For our refund demo, the answer is: **UI dialog via `ToolConfirmation`** for humans; **Runner event injection** for JUnit. Architecture spike only documents the exact `FunctionResponse` JSON for the test harness.
 
 ### 5. `coordinator-of-coordinators` as a unified entry point
 
