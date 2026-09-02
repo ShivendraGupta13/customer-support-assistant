@@ -1,6 +1,6 @@
 # Playbook: Customer Support Investigation Assistant — Manual Test Guide
 
-Status: **DRAFT — awaiting approval**
+Status: **APPROVED**
 Depends on: `spec.md` (approved)
 Next doc (gated on approval of this one): `architecture.md`
 
@@ -62,7 +62,7 @@ This is the manual test script for every feature built in this project. For each
 
 ## 2. Sequential Workflow — `demo-sequential-investigation`
 
-**Covers**: `SequentialAgent`, agent composition via `outputKey` chaining, Database/REST tool calls, Retry & error recovery. **Architecture**: D2, D9, D10.
+**Covers**: `SequentialAgent`, agent composition via `outputKey` chaining, database tool calls, Retry & error recovery. **Architecture**: D2, D9, D10.
 
 | Step | Query | Expected |
 |---|---|---|
@@ -195,8 +195,7 @@ Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — [
 | Dynamic routing, Coordinator/Specialist, Agent delegation, Conditional branching, Nested workflows | §4 | D4 |
 | Human-in-the-loop, Retry & error recovery | §5 (and §2 step 2 for non-HITL error recovery) | D5, D2 |
 | Single Agent, Multi-Agent, Agent composition | §1, §2–§4 | D1–D4 |
-| Java Functions, REST APIs, Database Tool, File Tool, Custom Tools | §1–§3 (tools exercised throughout) | D1, D2 |
-| Search Tool / MCP Tools | Descoped unless MCP support confirmed available — flagged in `plan.md` | — |
+| Java Functions, Database Tool, Custom Tools | §1–§3 (tools exercised throughout) | D1, D2 |
 | Short-Term Memory | §1 step 2 | D8 |
 | Long-Term Memory, Episodic Memory | §8 | D8 |
 | Semantic Memory | §7 (policy facts also serve as semantic memory) | D7, D8 |
@@ -204,8 +203,3 @@ Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — [
 | Guardrails (all sub-topics) | Cross-Cutting: Guardrails | D9 |
 | Observability (OTel, Langfuse) | Cross-Cutting: Observability | D10 |
 | Evaluation (golden datasets, prompt / agent / tool eval) | Cross-Cutting: Evaluation Harness (Layers 0–3) | D12 |
-
-**Note**: "Search Tool" and "MCP Tools" from the POC checklist have no dedicated scenario yet — MCP Tools support in `google-adk` for Java needs to be confirmed during Architecture research before we commit to a scenario; if unsupported/immature, it will be explicitly descoped rather than silently dropped.
-
----
-**Approval needed on this document before `architecture.md` is written.** In particular, confirm: canonical seed data (including the hybrid trap clause), per-scenario expectations (especially §7 step 3 and §5 HITL via Web UI dialog), layered eval, and the Search/MCP descoping note.

@@ -56,12 +56,8 @@ Goals:
 ## Tool Calling
 
 - Java Functions
-- REST APIs
 - Database Tool
-- File Tool
-- Search Tool
 - Custom Tools
-- MCP Tools (if available)
 
 ---
 

@@ -1,8 +1,8 @@
 # Spec: Customer Support Investigation Assistant (Google ADK Java POC)
 
-Status: **DRAFT — awaiting approval**
+Status: **APPROVED**
 Depends on: `Google ADK Java POC.md` (topic checklist this project must cover)
-Next docs (each gated on approval of the previous): `playbook.md` → `architecture.md` → `plan.md`
+Next docs (each gated on approval of the previous): `playbook.md` (approved) → `architecture.md` → `plan.md`
 
 ## Objective
 
@@ -39,14 +39,14 @@ There is no real external system to call; everything above is synthetic and gene
 
 ## Capability Map (Phase 0 — module boundaries)
 
-This request bundles many independently testable capabilities. Below is the proposed decomposition into build modules (Java packages within the single app), each traceable to POC topics. **Please review this map before Playbook/Architecture are written** — it becomes the backbone of both.
+This request bundles many independently testable capabilities. Below is the decomposition into build modules (Java packages within the single app), each traceable to POC topics. It is the backbone of the Playbook and Architecture.
 
 | Module id | Responsibility | POC topics covered | Depends on |
 |---|---|---|---|
 | `domain-data` | JPA entities + H2 schema + synthetic seed data | — (foundation) | — |
 | `model-routing` | `llm.provider` config + `ModelFactory` producing the right ADK `BaseLlm` (Ollama/Gemini/Anthropic/OpenRouter) | Model configuration | — |
 | `observability` | OTel SDK setup, OTLP exporter to Langfuse, span/event capture around agent runs, tool calls, model calls | Observability (traces, agent events, tool execution, token usage, latency, errors, cost, logs, metrics) | `model-routing` |
-| `shared-tools` | Java function tools wrapping domain data: order lookup, payment history, shipment tracking, fraud signal check, a simulated "carrier REST API" tool, a file-export tool | Tool Calling (Java Functions, REST APIs, Database Tool, File Tool, Custom Tools) | `domain-data` |
+| `shared-tools` | Java function tools wrapping domain data: order lookup, payment history, shipment tracking, fraud signal check | Tool Calling (Java Functions, Database Tool, Custom Tools) | `domain-data` |
 | `memory-services` | Short-term (session state helpers), Long-term (H2-backed customer preferences), Episodic (H2-backed past tickets + similarity lookup), Semantic (Qdrant-backed facts/business rules) | Memory (all 4 types) + Memory comparison matrix | `domain-data` |
 | `guardrails` | Before/after model & tool callbacks: input/output guardrails, PII masking, prompt-injection/jailbreak heuristics, basic content moderation | Guardrails (all sub-topics) | `model-routing` |
 | `rag-index` | Markdown-header chunking + dense embeddings + lexical (full-text) index + RRF hybrid retrieval + citation formatting | RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation) | `domain-data`, `memory-services` (shares Qdrant) |
@@ -69,7 +69,7 @@ Each `demo-*` module registers its own `public static final BaseAgent ROOT_AGENT
 
 Per your confirmation: we run `google-adk-dev`'s `AdkWebServer` directly (`mvn compile exec:java -Dexec.mainClass=com.google.adk.web.AdkWebServer`) as the application process. All our code (tools, memory services, guardrail callbacks, observability wiring, JPA repos) lives as plain Java/Spring classes on the same classpath/source-dir that `AdkWebServer` scans. We do **not** build a second custom `@RestController` layer. This matches "interaction via AdkWebServer/REST endpoints only, no custom UI," and is acceptable because this project's purpose is learning, not a production deployment (Google's own docs mark `AdkWebServer` as dev-only for exactly the reason we're using it: fast iteration with a built-in UI+REST API).
 
-**Agent construction (proposed; confirm in Open Question #1):** `CompiledAgentLoader` finds `public static final BaseAgent ROOT_AGENT`. Those fields are not Spring beans, and `AdkWebServer`'s default component scan (`com.google.adk.web`) will not pick up `com.northwind.support`. Do **not** constructor-inject into agent classes. Use a composition-root registry for tools/services; use Spring for JPA/Qdrant/OTel if AutoConfiguration is picked up. Architecture spike only chooses the boot path: AutoConfiguration inside `AdkWebServer` vs our `main` calling `AdkWebServer.start(agents...)`.
+**Agent construction (decided — see Open Question #1):** `CompiledAgentLoader` finds `public static final BaseAgent ROOT_AGENT`. Those fields are not Spring beans, and `AdkWebServer`'s default component scan (`com.google.adk.web`) will not pick up `com.northwind.support`. Do **not** constructor-inject into agent classes. Use a composition-root registry for tools/services; use Spring for JPA/Qdrant/OTel if AutoConfiguration is picked up. Architecture spike only chooses the boot path: AutoConfiguration inside `AdkWebServer` vs our `main` calling `AdkWebServer.start(agents...)`.
 
 ## Model Routing Config (shape, to be finalized in Architecture)
 
@@ -234,11 +234,11 @@ data/           → H2 file-mode database (gitignored)
 
 ## Open Questions / Risks
 
-Proposed resolutions below. Confirm or override — Architecture will treat confirmed items as decided and only spike what remains actually unknown.
+**Status: decided** (approved with spec). Architecture spikes only what remains technically unknown (boot path, HITL `FunctionResponse` JSON, embedding dim check).
 
 ### 1. Spring DI inside `AdkWebServer`-loaded agent classes
 
-**Propose: composition root (option b), with Spring used for infrastructure beans — not for constructing `ROOT_AGENT`.**
+**Decided: composition root, with Spring used for infrastructure beans — not for constructing `ROOT_AGENT`.**
 
 `AdkWebServer` *is* a Spring Boot app (`@SpringBootApplication`), and `CompiledAgentLoader` is a Spring `@Service`. A context exists. That does **not** mean our `@Service` classes are scanned (`AdkWebServer` lives in `com.google.adk.web`, so default component scan will not pick up `com.northwind.support`), and it does **not** mean agents can use constructor injection: they are discovered as `public static final BaseAgent ROOT_AGENT`, which is initialized on class load, not as a Spring bean.
 
@@ -248,13 +248,13 @@ Fighting that with `ApplicationContextAware` static holders is how you get "work
 
 ### 2. Embedding model (fully local)
 
-**Propose: `nomic-embed-text` via Ollama HTTP, behind `EmbeddingClient`. Do not send embed requests through ADK `BaseLlm`.**
+**Decided: `nomic-embed-text` via Ollama HTTP, behind `EmbeddingClient`. Do not send embed requests through ADK `BaseLlm`.**
 
 ADK's Java model types (`Gemini`, `Claude`, `OpenAiCompatibleLlm`) are chat/completions models. Embeddings are a different HTTP shape. Calling Ollama directly (or its OpenAI-compatible embeddings route) is the boring path and keeps the default stack fully local/free. Architecture confirms with one `curl` that the pulled model returns 768-dim vectors; the interface stays swappable if a cloud embedder is added later.
 
 ### 3. ADK Java evaluation API vs custom JUnit harness
 
-**Propose: keep a custom JUnit harness. Do not depend on Java `AgentEvaluator` or the Web UI Eval tab.**
+**Decided: keep a custom JUnit harness. Do not depend on Java `AgentEvaluator` or the Web UI Eval tab.**
 
 Python ADK has `AgentEvaluator` and `adk eval` ([docs](https://google.github.io/adk-docs/evaluate/)). Java's matching Web UI/REST eval endpoints are **unimplemented** as of [adk-java#300](https://github.com/google/adk-java/issues/300) (still open). The Eval tab in `AdkWebServer` cannot save or run eval sets today.
 
@@ -281,7 +281,7 @@ Our golden JSON mirrors Python eval-set shape (`query`, `expected_tool_use`, `mu
 | **`ToolConfirmation`** (`FunctionTool` with `requireConfirmation`, or `toolContext.requestConfirmation()`) | **Web UI shows an approval dialog** ([ADK confirmation docs](https://adk.dev/tools-custom/confirmation/), [Java 1.0 HITL blog](https://developers.googleblog.com/announcing-adk-for-java-100-building-the-future-of-ai-agents-in-java/)). User clicks Approve/Reject in the Dev UI. | `InMemoryRunner`: programmatically send the `adk_request_confirmation` `FunctionResponse` with `confirmed: true/false` — no Postman, no browser. |
 | **`LongRunningFunctionTool`** | Pauses until the **client** posts a `functionResponse` on `/run` or `/run_sse`. General **workflow Resume** from Web UI/CLI is [not supported](https://google.github.io/adk-docs/runtime/resume/). | Same REST shape, or Runner API in tests. |
 
-**Propose for this POC:** implement HITL with **`ToolConfirmation` on the refund tool**, not `LongRunningFunctionTool`. That gives a clean live-demo path (type query → dialog appears → click Approve) and a clean test path (`InMemoryRunner` + synthetic confirmation response). Postman is **not** part of the Playbook demo flow.
+**Decided for this POC:** implement HITL with **`ToolConfirmation` on the refund tool**, not `LongRunningFunctionTool`. That gives a clean live-demo path (type query → dialog appears → click Approve) and a clean test path (`InMemoryRunner` + synthetic confirmation response). Postman is **not** part of the Playbook demo flow.
 
 `LongRunningFunctionTool` remains a documented alternative in Architecture if we need to show async external jobs; it is not the primary HITL demo unless the 1.9.x spike proves `ToolConfirmation` cannot express "refund above threshold."
 
@@ -289,9 +289,6 @@ Our golden JSON mirrors Python eval-set shape (`query`, `expected_tool_use`, `mu
 
 ### 5. `coordinator-of-coordinators` as a unified entry point
 
-**Propose: stay deferred. Do not build it in this POC.**
+**Decided: stay deferred. Do not build it in this POC.**
 
 Each `demo-*` agent is a teaching unit: the Playbook names which dropdown entry to pick, and eval asserts on that graph. A top-level router would hide which pattern ran, couple every demo's prompt to every other, and make Layer 3 failures ambiguous. Revisit only after all demos and the harness pass.
-
----
-**Approval needed** on: Capability Map, mock domain, Architecture Decision (`AdkWebServer`), RAG chunking/hybrid contract, layered eval/prompt strategy, and the five proposed open-question resolutions. `playbook.md` is already in draft against this spec — approve or correct both before `architecture.md`.
