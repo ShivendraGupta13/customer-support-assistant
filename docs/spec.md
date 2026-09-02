@@ -18,8 +18,8 @@ This is a **technology-learning POC**, not a production system. Success is measu
 | Concern | Choice | Notes |
 |---|---|---|
 | Language | Java 25 | `google-adk` jars are compiled for Java 17 target; run fine as a dependency on a Java 25 JDK (forward-compatible bytecode). |
-| Framework | Spring Boot (latest stable compatible with Java 25) | The app *is* `google-adk-dev`'s `AdkWebServer` process — see Architecture Decision below. |
-| Build | Maven | Single module, single `pom.xml`. `exec-maven-plugin` launches `com.google.adk.web.AdkWebServer`. |
+| Framework | Spring Boot **4.0.2** (transitive via `google-adk-dev` 1.9.0 — do not override unless Architecture spike validates) | The app *is* `google-adk-dev`'s `AdkWebServer` process — see Architecture Decision below. |
+| Build | Maven | Single module, single `pom.xml`. `exec-maven-plugin` launches `com.google.adk.web.AdkWebServer`. Pin: `google-adk` / `google-adk-dev` **1.9.0**, `java.version` **25**. Run `mvn -q dependency:tree -Dincludes=org.springframework.boot` after first build to confirm effective Spring Boot version. |
 | Agent framework | `google-adk` + `google-adk-dev` (currently 1.9.x) | Core agents/tools/workflows + dev web server & REST API. |
 | Default LLM | Ollama, `qwen2.5:7b`, via ADK's built-in `OpenAiCompatibleLlm` | Ollama must already be running locally (`ollama serve`, model pulled) — out of scope for us to install. |
 | Alternate LLMs | Gemini (native ADK `Gemini` model class), Anthropic (native ADK `Claude` model class), OpenRouter (via `OpenAiCompatibleLlm`) | Switchable via one config property, no code change. |
@@ -139,7 +139,7 @@ If a first implementation's dense-only already ranks the loyalty chunk #1, the f
 
 ## Cross-Cutting Concerns (apply to every `demo-*` agent, not separate demos)
 
-- **Guardrails**: input guardrail (prompt-injection/jailbreak heuristics, PII detection on inbound text) and output guardrail (PII masking, basic hallucination/policy-compliance check) wired as ADK before/after model & tool callbacks on every agent.
+- **Guardrails**: input guardrail (prompt-injection/jailbreak heuristics, PII detection on inbound text) and output guardrail (PII masking, lightweight heuristic checks — uncited factual claims, policy-keyword mismatches — plus audit log). These are **not** a second-LLM safety judge; hallucination mitigation for RAG is proven by retrieval + Playbook §7.4 (manual: empty retrieval → "not covered" response), not by a 7B model grading another 7B's output.
 - **Observability**: every agent run, tool call, and model call emits an OTel span with token usage/latency/cost attributes where available, exported via OTLP to Langfuse. No agent is exempt.
 - **Prompts**: versioned files under `src/main/resources/prompts/`, not string literals edited while staring at the Web UI. Changing a prompt is a code change that must pass the prompt-eval layer before it is considered done.
 - **Evaluation**: the layered JUnit harness below — run via `mvn test`, independent of the running `AdkWebServer` process. The Web UI is manual confirmation, not the inner loop.
