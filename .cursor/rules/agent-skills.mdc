@@ -1,0 +1,11 @@
+---
+description: Use agent-skills workflows from .cursor/skills
+alwaysApply: true
+---
+
+Before non-trivial technical work:
+
+1. Route via `.cursor/skills/using-agent-skills/SKILL.md`.
+2. Read and follow the matching skill under `.cursor/skills/<name>/SKILL.md`.
+3. When a skill links to supporting docs, read them from `.cursor/references/` (shared checklists) or from that skill's folder (e.g. `references/`, `examples.md`).
+4. Prefer project skills over guessing; user does not need to say "read skill" each time.
