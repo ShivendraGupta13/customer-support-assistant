@@ -129,14 +129,14 @@ mvn compile exec:java
 **Description:** Map frozen SQL to Spring Data JPA. Prove Spring Boot loaded Playbook fixtures from `data.sql`. Do not add a second Java seeder for those tables.
 
 **Acceptance criteria:**
-- [ ] Entities + repositories match `schema.sql` 1:1, co-located by subdomain (`commerce/`, `support/`, `risk/`, `platform/` — see `architecture.md` §3); H2 file-mode `jdbc:h2:file:./data/support-assistant`; `ddl-auto=validate`; `spring.jpa.defer-datasource-initialization=true`
-- [ ] Load test proves ORD-5001 DELAYED, CUST-1001 EMAIL, ORD-5010 amount 350, fraud 0.82 on ORD-5002, ORD-9999 missing
-- [ ]Do not `save()` customers/orders/preferences (or any other `data.sql` row). Qdrant policy indexing is Task 11c (`PolicyChunkIndexer`), not this task.
+- [x] Entities + repositories match `schema.sql` 1:1, co-located by subdomain (`commerce/`, `support/`, `risk/`, `platform/` — see `architecture.md` §3); H2 file-mode `jdbc:h2:file:./data/support-assistant`; `ddl-auto=create-drop`; `spring.jpa.defer-datasource-initialization=true`
+- [x] Load test proves ORD-5001 DELAYED, CUST-1001 EMAIL, ORD-5010 amount 350, fraud 0.82 on ORD-5002, ORD-9999 missing
+- [x] Do not `save()` customers/orders/preferences (or any other `data.sql` row). Qdrant policy indexing is Task 11c (`PolicyChunkIndexer`), not this task.
 
 **Verification:**
-- [ ] Tests pass: seed/load test (JDBC or repositories) on H2
-- [ ] Build succeeds: `mvn -q test` (or focused test class)
-- [ ] Manual check: after app start, H2 console or log shows seed counts matching `data.sql`
+- [x] Tests pass: seed/load test (JDBC or repositories) on H2
+- [x] Build succeeds: `mvn -q test` (or focused test class)
+- [x] Manual check: after app start, H2 console or log shows seed counts matching `data.sql`
 
 **Dependencies:** Task 1, Task 3
 

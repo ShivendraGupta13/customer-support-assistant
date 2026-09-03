@@ -63,7 +63,7 @@ flowchart LR
 
 1. `main()` → `SpringApplication.run` starts our context.
 2. Our `@Configuration` classes build: JPA/H2, `QdrantClient` (gRPC, `:6334`), the `OpenTelemetrySdk` (OTLP/HTTP exporter → Langfuse), and `ModelFactory`.
-3. During context refresh (not an `ApplicationRunner`), `@Bean` methods populate module-scoped static bridges in `integration/adk/` so agent classes can use them (they are not Spring beans — see below). H2 business rows come from `schema.sql` + `data.sql`. After RAG exists, a separate `PolicyChunkIndexer` `ApplicationRunner` embeds policy markdown into Qdrant if the collection is empty — it must never `save()` / `INSERT` Northwind tables.
+3. During context refresh (not an `ApplicationRunner`), `@Bean` methods populate module-scoped static bridges in `integration/adk/` so agent classes can use them (they are not Spring beans — see below). Hibernate `ddl-auto=create-drop` creates H2 tables from JPA entities (mapped 1:1 to `schema.sql`); business rows come from `data.sql` only. After RAG exists, a separate `PolicyChunkIndexer` `ApplicationRunner` embeds policy markdown into Qdrant if the collection is empty — it must never `save()` / `INSERT` Northwind tables.
 4. `AdkWebServer`'s own auto-configuration registers its beans (`sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter` — all `InMemory*` by default) [[2]](#references).
 5. `CompiledAgentLoader` (`@Service("agentLoader")`, active by default via `@ConditionalOnProperty(matchIfMissing=true)`) scans `--adk.agents.source-dir=target` for classes exposing `public static final BaseAgent ROOT_AGENT`, and registers one entry per `demo-*` agent in the Web UI dropdown [[3]](#references). Pass `target` (Maven build output root), not `target/classes` — the latter treats package folders as agent units and finds none.
 
@@ -169,7 +169,7 @@ No client-side BM25 tokenizer. Qdrant generates sparse BM25 vectors from raw tex
 
 ### 4.1 H2 schema
 
-Executable contract (DDL + seed): `[src/main/resources/schema.sql](../src/main/resources/schema.sql)` and `[src/main/resources/data.sql](../src/main/resources/data.sql)`. Column types, FKs, and allowed-value CHECKs live only in those files — do not duplicate them here. `GUARDRAIL_AUDIT_LOG` and `EVALUATION_RUN` are standalone logs (no FK); seed leaves both empty. `ORD-9999` is never seeded.
+Column/FK contract: `[src/main/resources/schema.sql](../src/main/resources/schema.sql)`. Runtime DDL is Hibernate `create-drop` from the JPA entities that match that file. Seed: `[src/main/resources/data.sql](../src/main/resources/data.sql)`. Column types, FKs, and allowed-value CHECKs live only in `schema.sql` — do not duplicate them as Java enums. `GUARDRAIL_AUDIT_LOG` and `EVALUATION_RUN` are standalone logs (no FK); seed leaves both empty. `ORD-9999` is never seeded.
 
 ```mermaid
 erDiagram

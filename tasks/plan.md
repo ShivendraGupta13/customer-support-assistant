@@ -8,7 +8,7 @@ Sources of truth for this plan: approved spec / architecture / playbook, plus th
 
 ## Architecture Decisions
 
-- **H2 contract is SQL, not a new markdown schema doc.** `src/main/resources/schema.sql` is DDL. `src/main/resources/data.sql` is the only place customers, orders, payments, shipments, tickets, preferences, and fraud rows are inserted. Hibernate `ddl-auto=validate`.
+- **H2 contract is SQL, not a new markdown schema doc.** `src/main/resources/schema.sql` is the column/FK contract entities must match. Hibernate `ddl-auto=create-drop` creates tables from those entities at startup. `src/main/resources/data.sql` is the only place customers, orders, payments, shipments, tickets, preferences, and fraud rows are inserted.
 - **No `bootstrap/AppServices`.** Agent classes are not Spring beans, so they cannot `@Autowired`. Each capability gets a small static bridge in `integration/adk/` (`ToolDependencies`, `LlmContext`, `TracingContext`, `VectorContext`), populated by a `@Bean` method during context refresh — not by an `ApplicationRunner`. Agents and tools import only the bridge they need.
 - **Qdrant indexing is a separate runner.** `PolicyChunkIndexer` (Task 11c) is an `ApplicationRunner` that chunks/embeds policy markdown into `policy_chunks`. It must never `save()` / `INSERT` Northwind tables. A Java seeder plus `data.sql` would drift.
 - **Domain packages are subdomain-colocated.** Entity + repository live together under `commerce/`, `support/`, `risk/`, and `platform/` — not a flat `domain/` + `domain/repository/`. `@SpringBootApplication` on `com.poc.adk` is enough for JPA scans.
@@ -77,7 +77,7 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 ### Phase 1: Shared infrastructure
 
 - [x] Task 4: Docker Compose (Qdrant ≥ 1.15.2, Langfuse ≥ v3.22.0)
-- [ ] Task 5: `domain-data` — JPA matches `schema.sql`; `data.sql` load proven
+- [x] Task 5: `domain-data` — JPA matches `schema.sql`; `data.sql` load proven
 - [ ] Task 6: `model-routing`
 - [ ] Task 7: `observability`
 - [ ] Task 8: `shared-tools` + Layer 0

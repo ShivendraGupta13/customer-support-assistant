@@ -4,3 +4,19 @@ server:
 adk:
   agents:
     source-dir: target
+
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/support-assistant
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    defer-datasource-initialization: true
+  sql:
+    init:
+      mode: always
+      # Hibernate create-drop owns DDL; schema.sql stays the documented contract.
+      schema-locations: optional:classpath:do-not-run-schema.sql
+      data-locations: classpath:data.sql
