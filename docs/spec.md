@@ -125,7 +125,7 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 ```
 
 - **Agent loading** — default `CompiledAgentLoader` scans `--adk.agents.source-dir` for `public static final BaseAgent ROOT_AGENT` on each `demo-*` class.
-- **Spring wiring** — `ROOT_AGENT` is not a Spring bean; agent classes reach JPA/Qdrant/OTel via a static `AppServices` holder populated at startup (`ApplicationRunner`), before any request loads agent classes.
+- **Spring wiring** — `ROOT_AGENT` is not a Spring bean; agent classes reach JPA/Qdrant/OTel via module-scoped static bridges in `integration/adk/` (`ToolDependencies`, `LlmContext`, `TracingContext`, `VectorContext`), each populated by a `@Bean` during context refresh. Do not use a single `AppServices` holder or an `ApplicationRunner` for this wiring.
 - **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` in `com.poc.adk`; `AdkWebServer` already registers them.
 
 ## Memory
@@ -417,12 +417,13 @@ Indicative layout — see `architecture.md` §3.
 pom.xml
 src/main/java/com/poc/adk/
   SupportAssistantApplication.java  → `@SpringBootApplication(scanBasePackages = {..., "com.google.adk.web"})`
-  config/       → model-routing, observability, qdrant, data-seed config
-  domain/       → JPA entities, repositories, seed loader
+  commerce/ support/ risk/ platform/  → JPA entities + repositories, co-located by subdomain
+  config/       → Spring `@Configuration` / `@ConfigurationProperties` (model-routing, observability, qdrant)
+  integration/  → module-scoped ADK bridges (`adk/` holders + `config/` `@Bean` wiring)
   tools/        → shared Java function tools
   memory/       → long-term preference tool (H2); semantic memory is `rag/` over policy_chunks
   guardrails/   → callbacks + PII/prompt-injection utilities
-  rag/          → chunking, embedding, retrieval (dense + lexical + RRF), citation formatting
+  rag/          → chunking, embedding, retrieval (dense + lexical + RRF), citation formatting, policy indexer
   agents/
     singleagent/  sequential/  parallel/  routing/  hitl/  loop/  rag/  personalization/
 src/main/resources/policies/   → markdown policy documents (RAG source, not H2)

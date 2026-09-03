@@ -128,9 +128,9 @@ mvn compile exec:java
 **Description:** Map frozen SQL to Spring Data JPA. Prove Spring Boot loaded Playbook fixtures from `data.sql`. Do not add a second Java seeder for those tables.
 
 **Acceptance criteria:**
-- [ ] Entities + repositories match `schema.sql` 1:1; H2 file-mode `jdbc:h2:file:./data/support-assistant`; `ddl-auto=validate`; `spring.jpa.defer-datasource-initialization=true`
+- [ ] Entities + repositories match `schema.sql` 1:1, co-located by subdomain (`commerce/`, `support/`, `risk/`, `platform/` — see `architecture.md` §3); H2 file-mode `jdbc:h2:file:./data/support-assistant`; `ddl-auto=validate`; `spring.jpa.defer-datasource-initialization=true`
 - [ ] Load test proves ORD-5001 DELAYED, CUST-1001 EMAIL, ORD-5010 amount 350, fraud 0.82 on ORD-5002, ORD-9999 missing
-- [ ] `AppServicesInitializer` copies Spring beans into `AppServices` only. It does not `save()` customers/orders/preferences (or any other `data.sql` row). Qdrant policy indexing is Task 11c, not this task.
+- [ ]Do not `save()` customers/orders/preferences (or any other `data.sql` row). Qdrant policy indexing is Task 11c (`PolicyChunkIndexer`), not this task.
 
 **Verification:**
 - [ ] Tests pass: seed/load test (JDBC or repositories) on H2
@@ -141,11 +141,13 @@ mvn compile exec:java
 
 **Files likely touched:**
 - `src/main/resources/application.yml`
-- `src/main/java/com/poc/adk/domain/` (entities + `repository/`)
-- `src/main/java/com/poc/adk/bootstrap/AppServices.java`
+- `src/main/java/com/poc/adk/commerce/` (`customer/`, `order/`, `payment/`, `shipment/`)
+- `src/main/java/com/poc/adk/support/ticket/`
+- `src/main/java/com/poc/adk/risk/fraud/`
+- `src/main/java/com/poc/adk/platform/` (`audit/`, `evaluation/`)
 - `src/test/java/.../SeedLoadTest.java` (name may vary)
 
-**Estimated scope:** Large: 5-8 files (mechanical 1:1 with frozen schema; do not invent a second seed path)
+**Estimated scope:** Large: many small files (entity + repo co-located per subdomain; do not invent a second seed path)
 
 ## Task 6: model-routing
 
@@ -154,7 +156,7 @@ mvn compile exec:java
 **Acceptance criteria:**
 - [ ] `llm.provider` switches `ollama` | `gemini` | `anthropic` | `openrouter` via `ModelFactory` + `ModelRoutingProperties`
 - [ ] Default is Ollama `qwen2.5:7b` at `http://localhost:11434/v1/` as in spec
-- [ ] `ModelFactory` is reachable via `AppServices` (agents are not Spring beans). Unit test covers the enum switch with no network
+- [ ] `ModelFactory` is reachable via `LlmContext` (agents are not Spring beans). `LlmContext` is populated by a `@Bean` during context refresh, not an `ApplicationRunner`. Unit test covers the enum switch with no network
 
 **Verification:**
 - [ ] Tests pass: `ModelFactory` unit test
@@ -165,8 +167,9 @@ mvn compile exec:java
 
 **Files likely touched:**
 - `src/main/java/com/poc/adk/config/ModelRoutingProperties.java`
-- `src/main/java/com/poc/adk/config/ModelFactory.java` (package may match architecture)
-- `src/main/java/com/poc/adk/bootstrap/AppServices.java`
+- `src/main/java/com/poc/adk/config/ModelFactory.java`
+- `src/main/java/com/poc/adk/integration/adk/LlmContext.java`
+- `src/main/java/com/poc/adk/integration/config/LlmIntegrationConfig.java`
 - `src/main/resources/application.yml`
 - `src/test/java/.../ModelFactoryTest.java`
 
@@ -178,7 +181,7 @@ mvn compile exec:java
 
 **Acceptance criteria:**
 - [ ] `ObservabilityConfig` builds OpenTelemetry SDK with OTLP/HTTP to Langfuse `/api/public/otel`, Basic Auth, header `x-langfuse-ingestion-version: 4`
-- [ ] Tracer is reachable via `AppServices` for agent/tool/model spans
+- [ ] Tracer is reachable via `TracingContext` for agent/tool/model spans. `TracingContext` is populated by a `@Bean` during context refresh, not an `ApplicationRunner`
 
 **Verification:**
 - [ ] Tests pass: config/smoke test if practical without a live Langfuse; otherwise compile + Task 12 Langfuse check
@@ -189,8 +192,9 @@ mvn compile exec:java
 
 **Files likely touched:**
 - `src/main/java/com/poc/adk/config/ObservabilityConfig.java`
+- `src/main/java/com/poc/adk/integration/adk/TracingContext.java`
+- `src/main/java/com/poc/adk/integration/config/ObservabilityIntegrationConfig.java`
 - `src/main/resources/application.yml`
-- `src/main/java/com/poc/adk/bootstrap/AppServices.java`
 
 **Estimated scope:** Medium: 3-5 files
 
@@ -205,7 +209,7 @@ mvn compile exec:java
 **Description:** Java function tools wrap domain data so demo agents can look up orders, payments, shipments, and fraud without hallucinating rows.
 
 **Acceptance criteria:**
-- [ ] `OrderLookupTool`, `PaymentHistoryTool`, `ShipmentTrackingTool`, `FraudSignalTool` read via `AppServices` / repositories
+- [ ] `OrderLookupTool`, `PaymentHistoryTool`, `ShipmentTrackingTool`, `FraudSignalTool` read via `ToolDependencies` / repositories (`ToolDependencies` populated by `ToolIntegrationConfig` `@Bean` during context refresh)
 - [ ] `ToolEvalTest`: `orderLookup("ORD-5001")` → DELAYED; empty/not-found for `ORD-9999`; fraud `MULTIPLE_SHIPPING_ADDRESSES` score 0.82 on `ORD-5002`; payment for `ORD-5001` captured; shipment `SHP-7001` is `IN_TRANSIT_DELAYED` / 6 days
 
 **Verification:**
@@ -220,6 +224,8 @@ mvn compile exec:java
 - `src/main/java/com/poc/adk/tools/PaymentHistoryTool.java`
 - `src/main/java/com/poc/adk/tools/ShipmentTrackingTool.java`
 - `src/main/java/com/poc/adk/tools/FraudSignalTool.java`
+- `src/main/java/com/poc/adk/integration/adk/ToolDependencies.java`
+- `src/main/java/com/poc/adk/integration/config/ToolIntegrationConfig.java`
 - `src/test/java/.../ToolEvalTest.java`
 
 **Estimated scope:** Medium: 3-5 files
@@ -229,7 +235,7 @@ mvn compile exec:java
 **Description:** Long-term preference lookup reads `customer_id` from session state (`ToolContext`), not from the user message.
 
 **Acceptance criteria:**
-- [ ] `CustomerPreferenceTool` returns EMAIL for CUST-1001 and SMS for CUST-1002 from H2
+- [ ] `CustomerPreferenceTool` returns EMAIL for CUST-1001 and SMS for CUST-1002 from H2 via `ToolDependencies` (preference repo lives in `commerce/customer/`; do not add a second holder)
 - [ ] Tool does not parse customer id from chat text
 
 **Verification:**
@@ -320,7 +326,7 @@ mvn compile exec:java
 **Description:** One Qdrant `queryAsync` with dense prefetch + BM25 prefetch + RRF. Prove hybrid beats dense-only on the planted codes without an LLM.
 
 **Acceptance criteria:**
-- [ ] `HybridRetriever` + `CitationFormatter`; collection `policy_chunks` (`dense` 768 Cosine, `lexical` BM25); indexer in `AppServicesInitializer` (not SQL)
+- [ ] `HybridRetriever` + `CitationFormatter`; collection `policy_chunks` (`dense` 768 Cosine, `lexical` BM25); `PolicyChunkIndexer` `ApplicationRunner` indexes policy markdown (not SQL, not `AppServicesInitializer`); `VectorContext` holds `QdrantClient`
 - [ ] `RetrievalEvalTest`: hybrid top-1 is the loyalty courtesy chunk; dense-only top-1 is not. If dense-only already wins, strengthen shipping-policy distractor — do not edit the agent prompt
 
 **Verification:**
@@ -333,8 +339,9 @@ mvn compile exec:java
 **Files likely touched:**
 - `src/main/java/com/poc/adk/rag/HybridRetriever.java`
 - `src/main/java/com/poc/adk/rag/CitationFormatter.java`
+- `src/main/java/com/poc/adk/rag/PolicyChunkIndexer.java`
 - `src/main/java/com/poc/adk/config/QdrantConfig.java`
-- `src/main/java/com/poc/adk/bootstrap/AppServicesInitializer.java`
+- `src/main/java/com/poc/adk/integration/adk/VectorContext.java`
 - `src/test/java/.../RetrievalEvalTest.java`
 
 **Estimated scope:** Medium: 3-5 files

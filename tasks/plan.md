@@ -9,7 +9,9 @@ Sources of truth for this plan: approved spec / architecture / playbook, plus th
 ## Architecture Decisions
 
 - **H2 contract is SQL, not a new markdown schema doc.** `src/main/resources/schema.sql` is DDL. `src/main/resources/data.sql` is the only place customers, orders, payments, shipments, tickets, preferences, and fraud rows are inserted. Hibernate `ddl-auto=validate`.
-- **`AppServicesInitializer` has two jobs, neither of which is seeding H2.** (1) Copy Spring beans into the static `AppServices` holder so `ROOT_AGENT` classes can reach repos/Qdrant/OTel without `@Autowired`. (2) Later, chunk/embed policy markdown into Qdrant `policy_chunks` — that cannot live in `data.sql`. It must never `save()` / `INSERT` Northwind tables; a Java seeder plus `data.sql` would drift.
+- **No `bootstrap/AppServices`.** Agent classes are not Spring beans, so they cannot `@Autowired`. Each capability gets a small static bridge in `integration/adk/` (`ToolDependencies`, `LlmContext`, `TracingContext`, `VectorContext`), populated by a `@Bean` method during context refresh — not by an `ApplicationRunner`. Agents and tools import only the bridge they need.
+- **Qdrant indexing is a separate runner.** `PolicyChunkIndexer` (Task 11c) is an `ApplicationRunner` that chunks/embeds policy markdown into `policy_chunks`. It must never `save()` / `INSERT` Northwind tables. A Java seeder plus `data.sql` would drift.
+- **Domain packages are subdomain-colocated.** Entity + repository live together under `commerce/`, `support/`, `risk/`, and `platform/` — not a flat `domain/` + `domain/repository/`. `@SpringBootApplication` on `com.poc.adk` is enough for JPA scans.
 - **ER diagram stays in `architecture.md` §4.1.** Column/enum tables that duplicate DDL are removed and replaced with pointers to the SQL files.
 - **Module build order follows `spec.md`.** Do not reorder. Each `demo-*` agent is one Playbook scenario — that is this POC’s vertical slice (ADK Web UI is the only interaction surface).
 - **Session identity for Playbook §8** is initial `session.state.customer_id` at session create. Exact REST path/body, Dev UI state support, and whether `bind_customer` is needed are confirmed in Task 2 against `google-adk-dev` **1.9.0** (not older Javadoc). `bind_customer` is not built unless that spike says Dev UI cannot set state; if needed it lands in Task 19, not bootstrap.
@@ -34,7 +36,7 @@ ADK session contract (Task 2) ──► Playbook §8, Task 19, Layer 3 memory te
 
 bootstrap stub (Task 3)
     ├── docker-compose (Task 4, parallel)
-    ├── model-routing (Task 6, needs 5 — ModelFactory on AppServices)
+    ├── model-routing (Task 6, needs 3 — ModelFactory + LlmContext via @Bean)
     └── observability (Task 7, needs 4 + 5 + 6)
 
 rag-index (Tasks 11a–11c) needs 3, 4, 5
@@ -131,7 +133,7 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 |---|---|---|
 | ADK 1.9.0 session/Dev UI differs from older Javadoc | High | Task 2 fails fast against 1.9.0 source; Playbook §8 blocked until recorded |
 | Bean-name collision on bootstrap | High | Task 3 is the fail-fast; never add competing `@Bean` names |
-| Dual seed (Java `save()` plus `data.sql`) | High | Only `data.sql` inserts H2 business rows. Initializer wires `AppServices` and later upserts Qdrant policy chunks. |
+| Dual seed (Java `save()` plus `data.sql`) | High | Only `data.sql` inserts H2 business rows. `PolicyChunkIndexer` later upserts Qdrant policy chunks. No `AppServices` holder. |
 | Hybrid fixture too weak (dense-only already ranks loyalty #1) | Med | Strengthen `shipping-policy.md` distractor; never fix via agent prompt |
 | Task 5 entity/repo file count exceeds ~5 | Low | Schema is frozen in Task 1; one load-test is the slice. Split only if the session cannot finish. |
 | qwen2.5:7b weak prose | Low | Layers 0–1 never need cloud; Layer 4 is best-effort per spec |
