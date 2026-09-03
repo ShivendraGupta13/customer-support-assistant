@@ -32,6 +32,12 @@ class MemoryPersonalizationEvalTest {
 
   private static final String USER_MESSAGE = "What's the best way to reach me?";
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.memory.CustomerPreferenceTool customerPreferenceTool;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.guardrails.GuardrailAuditService auditService;
+
   @Test
   void layer3_cust1001SessionRecallsEmailPreference() {
     ScriptedLlm llm =
@@ -39,7 +45,8 @@ class MemoryPersonalizationEvalTest {
             ScriptedLlm.functionCall("customer_preference", Map.of()),
             ScriptedLlm.text("The best way to reach you is email."));
 
-    List<Event> events = run(MemoryPersonalizationAgent.create(llm), "CUST-1001");
+    List<Event> events =
+        run(MemoryPersonalizationAgent.create(llm, customerPreferenceTool, auditService), "CUST-1001");
 
     assertCustomerPreferenceCalled(events);
     assertThat(finalText(events)).containsIgnoringCase("email");
@@ -52,7 +59,8 @@ class MemoryPersonalizationEvalTest {
             ScriptedLlm.functionCall("customer_preference", Map.of()),
             ScriptedLlm.text("The best way to reach you is SMS."));
 
-    List<Event> events = run(MemoryPersonalizationAgent.create(llm), "CUST-1002");
+    List<Event> events =
+        run(MemoryPersonalizationAgent.create(llm, customerPreferenceTool, auditService), "CUST-1002");
 
     assertCustomerPreferenceCalled(events);
     assertThat(finalText(events)).containsIgnoringCase("SMS");

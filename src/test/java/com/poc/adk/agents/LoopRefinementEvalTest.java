@@ -29,6 +29,9 @@ import org.springframework.context.annotation.Import;
 @Import({ToolIntegrationConfig.class, GuardrailIntegrationConfig.class})
 class LoopRefinementEvalTest {
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.guardrails.GuardrailAuditService auditService;
+
   @Test
   void layer3_runsAtLeastTwoDraftCritiqueIterationsThenPublishesFinalDraft() {
     ScriptedLlm drafterLlm =
@@ -46,7 +49,7 @@ class LoopRefinementEvalTest {
                 "We sincerely apologize for the delay on order ORD-5001. We are working to deliver soon."));
 
     SequentialAgent agent =
-        LoopRefinementAgent.create(drafterLlm, criticLlm, publisherLlm);
+        LoopRefinementAgent.create(drafterLlm, criticLlm, publisherLlm, auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();
@@ -99,7 +102,7 @@ class LoopRefinementEvalTest {
         ScriptedLlm.of(ScriptedLlm.text("Best-effort apology for ORD-5001 delay despite open critiques."));
 
     SequentialAgent agent =
-        LoopRefinementAgent.create(drafterLlm, criticLlm, publisherLlm);
+        LoopRefinementAgent.create(drafterLlm, criticLlm, publisherLlm, auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();

@@ -10,11 +10,18 @@ import com.google.genai.types.Content;
 import com.google.genai.types.Part;
 import com.poc.adk.agents.routing.DynamicRoutingAgent;
 import com.poc.adk.eval.ScriptedLlm;
+import com.poc.adk.guardrails.GuardrailAuditService;
 import com.poc.adk.integration.config.GuardrailIntegrationConfig;
 import com.poc.adk.integration.config.ToolIntegrationConfig;
 import java.util.List;
 import java.util.Map;
+
+import com.poc.adk.memory.CustomerPreferenceTool;
+import com.poc.adk.tools.OrderLookupTool;
+import com.poc.adk.tools.PolicyRetrievalTool;
+import com.poc.adk.tools.ShipmentTrackingTool;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
@@ -28,6 +35,21 @@ import org.springframework.context.annotation.Import;
     })
 @Import({ToolIntegrationConfig.class, GuardrailIntegrationConfig.class})
 class DynamicRoutingEvalTest {
+
+  @Autowired
+  private OrderLookupTool orderLookupTool;
+
+  @Autowired
+  private ShipmentTrackingTool shipmentTrackingTool;
+
+  @Autowired
+  private CustomerPreferenceTool customerPreferenceTool;
+
+  @Autowired
+  private GuardrailAuditService auditService;
+
+  @Autowired(required = false)
+  private PolicyRetrievalTool policyRetrievalTool;
 
   @Test
   void layer3_refundQueryTransfersToBilling() {
@@ -60,13 +82,24 @@ class DynamicRoutingEvalTest {
         ScriptedLlm.of(ScriptedLlm.text("I will update your contact preference to SMS.")));
   }
 
-  private static void assertTransferTarget(
+  private void assertTransferTarget(
       String userMessage,
       String expectedSpecialist,
       ScriptedLlm coordinatorLlm,
       ScriptedLlm specialistLlm) {
+    PolicyRetrievalTool retrievalTool =
+        policyRetrievalTool != null ? policyRetrievalTool : new PolicyRetrievalTool(null);
     LlmAgent agent =
-        DynamicRoutingAgent.create(coordinatorLlm, specialistLlm, specialistLlm, specialistLlm);
+        DynamicRoutingAgent.create(
+            coordinatorLlm,
+            specialistLlm,
+            specialistLlm,
+            specialistLlm,
+            orderLookupTool,
+            retrievalTool,
+            shipmentTrackingTool,
+            customerPreferenceTool,
+            auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();

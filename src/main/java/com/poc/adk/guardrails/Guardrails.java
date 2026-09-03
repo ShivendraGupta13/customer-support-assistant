@@ -14,12 +14,22 @@ public final class Guardrails {
 
   private Guardrails() {}
 
-  public static LlmAgent.Builder apply(LlmAgent.Builder builder) {
+  public static LlmAgent.Builder apply(LlmAgent.Builder builder, GuardrailAuditService auditService) {
     return builder
-        .beforeModelCallbackSync(InputGuardrailCallback.INSTANCE)
-        .afterModelCallbackSync(OutputGuardrailCallback.INSTANCE)
+        .beforeModelCallbackSync(new InputGuardrailCallback(auditService))
+        .afterModelCallbackSync(new OutputGuardrailCallback(auditService))
         .beforeToolCallbackSync(Guardrails::beforeTool)
-        .afterToolCallbackSync(Guardrails::afterTool);
+        .afterToolCallbackSync((invCtx, baseTool, in, toolCtx, resp) -> {
+          if (auditService != null) {
+            auditService.record(
+                invCtx.session().id(), "OUTPUT", "TOOL:" + baseTool.name(), "ALLOWED");
+          }
+          return Optional.empty();
+        });
+  }
+
+  public static LlmAgent.Builder apply(LlmAgent.Builder builder) {
+    return apply(builder, null);
   }
 
   static Optional<Map<String, Object>> beforeTool(
@@ -35,9 +45,12 @@ public final class Guardrails {
       BaseTool baseTool,
       Map<String, Object> input,
       ToolContext toolContext,
-      Object response) {
-    GuardrailAuditService.record(
-        invocationContext.session().id(), "OUTPUT", "TOOL:" + baseTool.name(), "ALLOWED");
+      Object response,
+      GuardrailAuditService auditService) {
+    if (auditService != null) {
+      auditService.record(
+          invocationContext.session().id(), "OUTPUT", "TOOL:" + baseTool.name(), "ALLOWED");
+    }
     return Optional.empty();
   }
 }

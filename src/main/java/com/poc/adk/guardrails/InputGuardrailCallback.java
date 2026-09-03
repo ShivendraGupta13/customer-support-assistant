@@ -17,12 +17,18 @@ import java.util.stream.Collectors;
  */
 public final class InputGuardrailCallback implements BeforeModelCallbackSync {
 
-  public static final InputGuardrailCallback INSTANCE = new InputGuardrailCallback();
-
   private static final String INJECTION_REFUSAL =
       "I can't comply with requests that try to override my instructions.";
 
-  private InputGuardrailCallback() {}
+  private final GuardrailAuditService auditService;
+
+  public InputGuardrailCallback(GuardrailAuditService auditService) {
+    this.auditService = auditService;
+  }
+
+  public InputGuardrailCallback() {
+    this(null);
+  }
 
   @Override
   public Optional<LlmResponse> call(
@@ -31,13 +37,17 @@ public final class InputGuardrailCallback implements BeforeModelCallbackSync {
 
     Optional<String> injection = PromptInjectionHeuristics.detect(text);
     if (injection.isPresent()) {
-      GuardrailAuditService.record(
-          callbackContext.sessionId(), "INPUT", injection.get(), "BLOCKED");
+      if (auditService != null) {
+        auditService.record(
+            callbackContext.sessionId(), "INPUT", injection.get(), "BLOCKED");
+      }
       return Optional.of(modelText(INJECTION_REFUSAL));
     }
 
     if (PiiMasker.containsPii(text)) {
-      GuardrailAuditService.record(callbackContext.sessionId(), "INPUT", "PII_CARD", "MASKED");
+      if (auditService != null) {
+        auditService.record(callbackContext.sessionId(), "INPUT", "PII_CARD", "MASKED");
+      }
       return Optional.of(
           modelText("I can't store payment card numbers. " + PiiMasker.mask(text)));
     }

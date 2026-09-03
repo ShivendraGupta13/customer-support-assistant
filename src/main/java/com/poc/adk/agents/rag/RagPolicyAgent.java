@@ -10,23 +10,31 @@ import com.poc.adk.agents.common.ContextLlm;
 import com.poc.adk.guardrails.Guardrails;
 import com.poc.adk.tools.PolicyRetrievalTool;
 
+import com.poc.adk.guardrails.GuardrailAuditService;
+
 /** Playbook §7 — policy Q&A grounded in {@link PolicyRetrievalTool} with citations. */
 public final class RagPolicyAgent {
 
-  public static final BaseAgent ROOT_AGENT = create(new ContextLlm());
+  public static final BaseAgent ROOT_AGENT =
+      create(new ContextLlm(), new PolicyRetrievalTool(null), null);
 
-  public static LlmAgent create(BaseLlm model) {
-    return Guardrails.apply(
-            LlmAgent.builder()
-                .name("demo-rag-policy")
-                .description("Policy Q&A with hybrid retrieval and source citations")
-                .model(model)
-                .instruction(AgentPrompts.load("prompts/demo-rag-policy.v1.md"))
-                .tools(FunctionTool.create(PolicyRetrievalTool.class, "policyRetrieve"))
-                .generateContentConfig(AgentModels.temperatureZero())
-                .disallowTransferToParent(true)
-                .disallowTransferToPeers(true))
-        .build();
+  public static LlmAgent create(
+      BaseLlm model, PolicyRetrievalTool retrievalTool, GuardrailAuditService auditService) {
+    var builder =
+        LlmAgent.builder()
+            .name("demo-rag-policy")
+            .description("Policy Q&A with hybrid retrieval and source citations")
+            .model(model)
+            .instruction(AgentPrompts.load("prompts/demo-rag-policy.v1.md"))
+            .tools(FunctionTool.create(retrievalTool, "policyRetrieve"))
+            .generateContentConfig(AgentModels.temperatureZero())
+            .disallowTransferToParent(true)
+            .disallowTransferToPeers(true);
+    return Guardrails.apply(builder, auditService).build();
+  }
+
+  public static LlmAgent create(BaseLlm model, PolicyRetrievalTool retrievalTool) {
+    return create(model, retrievalTool, null);
   }
 
   private RagPolicyAgent() {}

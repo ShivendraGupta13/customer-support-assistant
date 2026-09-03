@@ -11,13 +11,19 @@ import com.poc.adk.agents.common.AgentPrompts;
 import com.poc.adk.agents.common.ContextLlm;
 import com.poc.adk.guardrails.Guardrails;
 
+import com.poc.adk.guardrails.GuardrailAuditService;
+
 /** Playbook §6 — LoopAgent draft→critique until exit, then publisher emits final draft only. */
 public final class LoopRefinementAgent {
 
   public static final BaseAgent ROOT_AGENT =
-      create(new ContextLlm(), new ContextLlm(), new ContextLlm());
+      create(new ContextLlm(), new ContextLlm(), new ContextLlm(), null);
 
-  public static SequentialAgent create(BaseLlm drafterModel, BaseLlm criticModel, BaseLlm publisherModel) {
+  public static SequentialAgent create(
+      BaseLlm drafterModel,
+      BaseLlm criticModel,
+      BaseLlm publisherModel,
+      GuardrailAuditService auditService) {
     LlmAgent drafter =
         Guardrails.apply(
                 LlmAgent.builder()
@@ -28,7 +34,8 @@ public final class LoopRefinementAgent {
                     .outputKey("draft")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LlmAgent critic =
@@ -42,7 +49,8 @@ public final class LoopRefinementAgent {
                     .outputKey("critique")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LoopAgent refinementLoop =
@@ -62,7 +70,8 @@ public final class LoopRefinementAgent {
                     .instruction(AgentPrompts.load("prompts/demo-loop-publisher.v1.md"))
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     return SequentialAgent.builder()
@@ -70,6 +79,11 @@ public final class LoopRefinementAgent {
         .description("Loop refinement then publish final apology")
         .subAgents(refinementLoop, publisher)
         .build();
+  }
+
+  public static SequentialAgent create(
+      BaseLlm drafterModel, BaseLlm criticModel, BaseLlm publisherModel) {
+    return create(drafterModel, criticModel, publisherModel, null);
   }
 
   private LoopRefinementAgent() {}

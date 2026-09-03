@@ -8,6 +8,7 @@ import com.google.adk.tools.FunctionTool;
 import com.poc.adk.agents.common.AgentModels;
 import com.poc.adk.agents.common.AgentPrompts;
 import com.poc.adk.agents.common.ContextLlm;
+import com.poc.adk.guardrails.GuardrailAuditService;
 import com.poc.adk.guardrails.Guardrails;
 import com.poc.adk.tools.OrderLookupTool;
 import com.poc.adk.tools.PaymentHistoryTool;
@@ -17,9 +18,26 @@ import com.poc.adk.tools.ShipmentTrackingTool;
 /** Playbook §2 — SequentialAgent gather → policy_check → draft via outputKey chaining. */
 public final class SequentialInvestigationAgent {
 
-  public static final BaseAgent ROOT_AGENT = create(new ContextLlm(), new ContextLlm(), new ContextLlm());
+  public static final BaseAgent ROOT_AGENT =
+      create(
+          new ContextLlm(),
+          new ContextLlm(),
+          new ContextLlm(),
+          new OrderLookupTool(null),
+          new PaymentHistoryTool(null),
+          new ShipmentTrackingTool(null),
+          new PolicyRetrievalTool(null),
+          null);
 
-  public static SequentialAgent create(BaseLlm gatherModel, BaseLlm policyModel, BaseLlm draftModel) {
+  public static SequentialAgent create(
+      BaseLlm gatherModel,
+      BaseLlm policyModel,
+      BaseLlm draftModel,
+      OrderLookupTool orderLookupTool,
+      PaymentHistoryTool paymentHistoryTool,
+      ShipmentTrackingTool shipmentTrackingTool,
+      PolicyRetrievalTool policyRetrievalTool,
+      GuardrailAuditService auditService) {
     LlmAgent gather =
         Guardrails.apply(
                 LlmAgent.builder()
@@ -28,13 +46,14 @@ public final class SequentialInvestigationAgent {
                     .model(gatherModel)
                     .instruction(AgentPrompts.load("prompts/demo-sequential-gather.v1.md"))
                     .tools(
-                        FunctionTool.create(OrderLookupTool.class, "orderLookup"),
-                        FunctionTool.create(PaymentHistoryTool.class, "paymentHistory"),
-                        FunctionTool.create(ShipmentTrackingTool.class, "shipmentTracking"))
+                        FunctionTool.create(orderLookupTool, "orderLookup"),
+                        FunctionTool.create(paymentHistoryTool, "paymentHistory"),
+                        FunctionTool.create(shipmentTrackingTool, "shipmentTracking"))
                     .outputKey("investigation_facts")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LlmAgent policyCheck =
@@ -44,11 +63,12 @@ public final class SequentialInvestigationAgent {
                     .description("Retrieve and summarize applicable policy")
                     .model(policyModel)
                     .instruction(AgentPrompts.load("prompts/demo-sequential-policy.v1.md"))
-                    .tools(FunctionTool.create(PolicyRetrievalTool.class, "policyRetrieve"))
+                    .tools(FunctionTool.create(policyRetrievalTool, "policyRetrieve"))
                     .outputKey("policy_findings")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LlmAgent draft =
@@ -61,7 +81,8 @@ public final class SequentialInvestigationAgent {
                     .outputKey("resolution_draft")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     return SequentialAgent.builder()
@@ -69,6 +90,25 @@ public final class SequentialInvestigationAgent {
         .description("Sequential investigation: gather → policy_check → draft")
         .subAgents(gather, policyCheck, draft)
         .build();
+  }
+
+  public static SequentialAgent create(
+      BaseLlm gatherModel,
+      BaseLlm policyModel,
+      BaseLlm draftModel,
+      OrderLookupTool orderLookupTool,
+      PaymentHistoryTool paymentHistoryTool,
+      ShipmentTrackingTool shipmentTrackingTool,
+      PolicyRetrievalTool policyRetrievalTool) {
+    return create(
+        gatherModel,
+        policyModel,
+        draftModel,
+        orderLookupTool,
+        paymentHistoryTool,
+        shipmentTrackingTool,
+        policyRetrievalTool,
+        null);
   }
 
   private SequentialInvestigationAgent() {}

@@ -8,6 +8,7 @@ import com.poc.adk.agents.common.AgentModels;
 import com.poc.adk.agents.common.AgentPrompts;
 import com.poc.adk.agents.common.ContextLlm;
 import com.poc.adk.guardrails.Guardrails;
+import com.poc.adk.guardrails.GuardrailAuditService;
 import com.poc.adk.memory.CustomerPreferenceTool;
 import com.poc.adk.tools.OrderLookupTool;
 import com.poc.adk.tools.PolicyRetrievalTool;
@@ -17,13 +18,27 @@ import com.poc.adk.tools.ShipmentTrackingTool;
 public final class DynamicRoutingAgent {
 
   public static final BaseAgent ROOT_AGENT =
-      create(new ContextLlm(), new ContextLlm(), new ContextLlm(), new ContextLlm());
+      create(
+          new ContextLlm(),
+          new ContextLlm(),
+          new ContextLlm(),
+          new ContextLlm(),
+          new OrderLookupTool(null),
+          new PolicyRetrievalTool(null),
+          new ShipmentTrackingTool(null),
+          new CustomerPreferenceTool(null),
+          null);
 
   public static LlmAgent create(
       BaseLlm coordinatorModel,
       BaseLlm billingModel,
       BaseLlm shippingModel,
-      BaseLlm accountModel) {
+      BaseLlm accountModel,
+      OrderLookupTool orderLookupTool,
+      PolicyRetrievalTool policyRetrievalTool,
+      ShipmentTrackingTool shipmentTrackingTool,
+      CustomerPreferenceTool customerPreferenceTool,
+      GuardrailAuditService auditService) {
     LlmAgent billing =
         Guardrails.apply(
                 LlmAgent.builder()
@@ -32,11 +47,12 @@ public final class DynamicRoutingAgent {
                     .model(billingModel)
                     .instruction(AgentPrompts.load("prompts/demo-dynamic-routing-billing.v1.md"))
                     .tools(
-                        FunctionTool.create(OrderLookupTool.class, "orderLookup"),
-                        FunctionTool.create(PolicyRetrievalTool.class, "policyRetrieve"))
+                        FunctionTool.create(orderLookupTool, "orderLookup"),
+                        FunctionTool.create(policyRetrievalTool, "policyRetrieve"))
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LlmAgent shipping =
@@ -47,11 +63,12 @@ public final class DynamicRoutingAgent {
                     .model(shippingModel)
                     .instruction(AgentPrompts.load("prompts/demo-dynamic-routing-shipping.v1.md"))
                     .tools(
-                        FunctionTool.create(OrderLookupTool.class, "orderLookup"),
-                        FunctionTool.create(ShipmentTrackingTool.class, "shipmentTracking"))
+                        FunctionTool.create(orderLookupTool, "orderLookup"),
+                        FunctionTool.create(shipmentTrackingTool, "shipmentTracking"))
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LlmAgent account =
@@ -61,10 +78,11 @@ public final class DynamicRoutingAgent {
                     .description("Account specialist for contact preferences")
                     .model(accountModel)
                     .instruction(AgentPrompts.load("prompts/demo-dynamic-routing-account.v1.md"))
-                    .tools(FunctionTool.create(CustomerPreferenceTool.class, "customerPreference"))
+                    .tools(FunctionTool.create(customerPreferenceTool, "customerPreference"))
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     return Guardrails.apply(
@@ -74,8 +92,30 @@ public final class DynamicRoutingAgent {
                 .model(coordinatorModel)
                 .instruction(AgentPrompts.load("prompts/demo-dynamic-routing-coordinator.v1.md"))
                 .subAgents(billing, shipping, account)
-                .generateContentConfig(AgentModels.temperatureZero()))
+                .generateContentConfig(AgentModels.temperatureZero()),
+            auditService)
         .build();
+  }
+
+  public static LlmAgent create(
+      BaseLlm coordinatorModel,
+      BaseLlm billingModel,
+      BaseLlm shippingModel,
+      BaseLlm accountModel,
+      OrderLookupTool orderLookupTool,
+      PolicyRetrievalTool policyRetrievalTool,
+      ShipmentTrackingTool shipmentTrackingTool,
+      CustomerPreferenceTool customerPreferenceTool) {
+    return create(
+        coordinatorModel,
+        billingModel,
+        shippingModel,
+        accountModel,
+        orderLookupTool,
+        policyRetrievalTool,
+        shipmentTrackingTool,
+        customerPreferenceTool,
+        null);
   }
 
   private DynamicRoutingAgent() {}

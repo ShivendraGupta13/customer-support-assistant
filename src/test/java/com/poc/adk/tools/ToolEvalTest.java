@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
@@ -28,23 +29,38 @@ import org.springframework.context.annotation.Import;
 @Import(ToolIntegrationConfig.class)
 class ToolEvalTest {
 
+  @Autowired
+  private OrderLookupTool orderLookupTool;
+
+  @Autowired
+  private FraudSignalTool fraudSignalTool;
+
+  @Autowired
+  private PaymentHistoryTool paymentHistoryTool;
+
+  @Autowired
+  private ShipmentTrackingTool shipmentTrackingTool;
+
+  @Autowired
+  private CustomerPreferenceTool customerPreferenceTool;
+
   @Test
   void orderLookup_returnsDelayedForOrd5001() {
-    Map<String, Object> result = OrderLookupTool.orderLookup("ORD-5001");
+    Map<String, Object> result = orderLookupTool.orderLookup("ORD-5001");
 
     assertThat(result.get("status")).isEqualTo("DELAYED");
   }
 
   @Test
   void orderLookup_returnsEmptyForMissingOrd9999() {
-    Map<String, Object> result = OrderLookupTool.orderLookup("ORD-9999");
+    Map<String, Object> result = orderLookupTool.orderLookup("ORD-9999");
 
     assertThat(result).isEmpty();
   }
 
   @Test
   void fraudSignal_returnsMultipleShippingAddressesOnOrd5002() {
-    Map<String, Object> result = FraudSignalTool.fraudSignal("ORD-5002");
+    Map<String, Object> result = fraudSignalTool.fraudSignal("ORD-5002");
 
     @SuppressWarnings("unchecked")
     List<Map<String, Object>> signals = (List<Map<String, Object>>) result.get("signals");
@@ -55,14 +71,14 @@ class ToolEvalTest {
 
   @Test
   void paymentHistory_returnsCapturedForOrd5001() {
-    Map<String, Object> result = PaymentHistoryTool.paymentHistory("ORD-5001");
+    Map<String, Object> result = paymentHistoryTool.paymentHistory("ORD-5001");
 
     assertThat(result.get("status")).isEqualTo("CAPTURED");
   }
 
   @Test
   void shipmentTracking_returnsDelayedShp7001ForOrd5001() {
-    Map<String, Object> result = ShipmentTrackingTool.shipmentTracking("ORD-5001");
+    Map<String, Object> result = shipmentTrackingTool.shipmentTracking("ORD-5001");
 
     assertThat(result.get("id")).isEqualTo("SHP-7001");
     assertThat(result.get("status")).isEqualTo("IN_TRANSIT_DELAYED");
@@ -72,7 +88,7 @@ class ToolEvalTest {
   @Test
   void customerPreference_returnsEmailForCust1001FromSessionState() {
     Map<String, Object> result =
-        CustomerPreferenceTool.customerPreference(toolContextWithCustomer("CUST-1001"));
+        customerPreferenceTool.customerPreference(toolContextWithCustomer("CUST-1001"));
 
     assertThat(result.get("preferred_contact_channel")).isEqualTo("EMAIL");
   }
@@ -80,14 +96,14 @@ class ToolEvalTest {
   @Test
   void customerPreference_returnsSmsForCust1002FromSessionState() {
     Map<String, Object> result =
-        CustomerPreferenceTool.customerPreference(toolContextWithCustomer("CUST-1002"));
+        customerPreferenceTool.customerPreference(toolContextWithCustomer("CUST-1002"));
 
     assertThat(result.get("preferred_contact_channel")).isEqualTo("SMS");
   }
 
   @Test
   void customerPreference_schemaDoesNotExposeCustomerId() {
-    FunctionTool tool = FunctionTool.create(CustomerPreferenceTool.class, "customerPreference");
+    FunctionTool tool = FunctionTool.create(customerPreferenceTool, "customerPreference");
 
     Map<String, ?> properties =
         tool.declaration().orElseThrow().parameters().orElseThrow().properties().orElseThrow();

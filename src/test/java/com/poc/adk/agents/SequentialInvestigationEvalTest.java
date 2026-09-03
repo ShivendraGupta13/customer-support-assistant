@@ -28,6 +28,21 @@ import org.springframework.context.annotation.Import;
 @Import({ToolIntegrationConfig.class, GuardrailIntegrationConfig.class})
 class SequentialInvestigationEvalTest {
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.tools.OrderLookupTool orderLookupTool;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.tools.PaymentHistoryTool paymentHistoryTool;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.tools.ShipmentTrackingTool shipmentTrackingTool;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.guardrails.GuardrailAuditService auditService;
+
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  private com.poc.adk.tools.PolicyRetrievalTool policyRetrievalTool;
+
   @Test
   void layer3_runsGatherThenPolicyThenDraft_andChainsOutputKeys() {
     ScriptedLlm gatherLlm =
@@ -41,8 +56,18 @@ class SequentialInvestigationEvalTest {
             ScriptedLlm.text(
                 "ORD-5001 is delayed in transit. Per shipping policy we can offer a courtesy update."));
 
+    com.poc.adk.tools.PolicyRetrievalTool retrievalTool =
+        policyRetrievalTool != null ? policyRetrievalTool : new com.poc.adk.tools.PolicyRetrievalTool(null);
     SequentialAgent agent =
-        SequentialInvestigationAgent.create(gatherLlm, policyLlm, draftLlm);
+        SequentialInvestigationAgent.create(
+            gatherLlm,
+            policyLlm,
+            draftLlm,
+            orderLookupTool,
+            paymentHistoryTool,
+            shipmentTrackingTool,
+            retrievalTool,
+            auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();
@@ -89,8 +114,18 @@ class SequentialInvestigationEvalTest {
     ScriptedLlm draftLlm =
         ScriptedLlm.of(ScriptedLlm.text("I could not find order ORD-9999 in our records."));
 
+    com.poc.adk.tools.PolicyRetrievalTool retrievalTool =
+        policyRetrievalTool != null ? policyRetrievalTool : new com.poc.adk.tools.PolicyRetrievalTool(null);
     SequentialAgent agent =
-        SequentialInvestigationAgent.create(gatherLlm, policyLlm, draftLlm);
+        SequentialInvestigationAgent.create(
+            gatherLlm,
+            policyLlm,
+            draftLlm,
+            orderLookupTool,
+            paymentHistoryTool,
+            shipmentTrackingTool,
+            retrievalTool,
+            auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();

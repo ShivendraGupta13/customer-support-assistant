@@ -38,6 +38,7 @@ import org.springframework.context.annotation.Import;
 class GuardrailEvalTest {
 
   @Autowired private GuardrailAuditLogRepository auditLogs;
+  @Autowired private GuardrailAuditService auditService;
 
   @Test
   void injectionIsBlockedAndWritesAuditRow() {
@@ -47,7 +48,7 @@ class GuardrailEvalTest {
     CallbackContext context = callbackContext("session-injection", userMessage);
 
     Optional<LlmResponse> blocked =
-        InputGuardrailCallback.INSTANCE.call(context, requestWith(userMessage));
+        new InputGuardrailCallback(auditService).call(context, requestWith(userMessage));
 
     assertThat(blocked).isPresent();
     assertThat(responseText(blocked.get()))
@@ -67,7 +68,7 @@ class GuardrailEvalTest {
     CallbackContext context = callbackContext("session-jailbreak", userMessage);
 
     Optional<LlmResponse> blocked =
-        InputGuardrailCallback.INSTANCE.call(context, requestWith(userMessage));
+        new InputGuardrailCallback(auditService).call(context, requestWith(userMessage));
 
     assertThat(blocked).isPresent();
     assertThat(auditLogs.findBySessionId("session-jailbreak"))
@@ -86,7 +87,7 @@ class GuardrailEvalTest {
     CallbackContext context = callbackContext("session-pii-in", userMessage);
 
     Optional<LlmResponse> skipped =
-        InputGuardrailCallback.INSTANCE.call(context, requestWith(userMessage));
+        new InputGuardrailCallback(auditService).call(context, requestWith(userMessage));
 
     assertThat(skipped).isPresent();
     String text = responseText(skipped.get());
@@ -114,7 +115,7 @@ class GuardrailEvalTest {
                     .build())
             .build();
 
-    Optional<LlmResponse> masked = OutputGuardrailCallback.INSTANCE.call(context, modelReply);
+    Optional<LlmResponse> masked = new OutputGuardrailCallback(auditService).call(context, modelReply);
 
     assertThat(masked).isPresent();
     assertThat(responseText(masked.get())).doesNotContain("4111-1111-1111-1111");
@@ -129,7 +130,7 @@ class GuardrailEvalTest {
   @Test
   void toolInvocationWritesAllowedAuditRow() {
     InvocationContext invocation = invocationContext("session-tool", Content.fromParts(Part.fromText("status")));
-    FunctionTool tool = FunctionTool.create(OrderLookupTool.class, "orderLookup");
+    FunctionTool tool = FunctionTool.create(new OrderLookupTool(null), "orderLookup");
 
     Optional<Map<String, Object>> override =
         Guardrails.afterTool(
@@ -137,7 +138,8 @@ class GuardrailEvalTest {
             tool,
             Map.of("order_id", "ORD-5001"),
             ToolContext.builder(invocation).functionCallId("fc-1").build(),
-            Map.of("status", "DELAYED"));
+            Map.of("status", "DELAYED"),
+            auditService);
 
     assertThat(override).isEmpty();
     assertThat(auditLogs.findBySessionId("session-tool"))
@@ -163,7 +165,7 @@ class GuardrailEvalTest {
     CallbackContext context = callbackContext("session-clean", userMessage);
 
     Optional<LlmResponse> skipped =
-        InputGuardrailCallback.INSTANCE.call(context, requestWith(userMessage));
+        new InputGuardrailCallback(auditService).call(context, requestWith(userMessage));
 
     assertThat(skipped).isEmpty();
     assertThat(auditLogs.findBySessionId("session-clean")).isEmpty();

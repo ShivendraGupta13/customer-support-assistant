@@ -42,6 +42,8 @@ class RagPolicyEvalTest {
   @Autowired QdrantClient qdrantClient;
   @Autowired ChunkingService chunkingService;
   @Autowired EmbeddingClient embeddingClient;
+  @Autowired com.poc.adk.tools.PolicyRetrievalTool policyRetrievalTool;
+  @Autowired com.poc.adk.guardrails.GuardrailAuditService auditService;
 
   @BeforeEach
   void indexPolicies() {
@@ -59,7 +61,7 @@ class RagPolicyEvalTest {
                 "You have 30 days from delivery to request a refund. "
                     + "Source: refund-policy.md — Refund request window"));
 
-    LlmAgent agent = RagPolicyAgent.create(llm);
+    LlmAgent agent = RagPolicyAgent.create(llm, policyRetrievalTool, auditService);
     List<Event> events = run(agent, "How many days do I have to request a refund?");
 
     assertPolicyRetrieveCalled(events);
@@ -83,7 +85,7 @@ class RagPolicyEvalTest {
                 "Yes, exception code NW-SHIP-EXC-04 applies to SKU NW-HP-1001 for GOLD courtesy refunds. "
                     + "Source: loyalty-policy.md — Courtesy weather-hold exception codes"));
 
-    LlmAgent agent = RagPolicyAgent.create(llm);
+    LlmAgent agent = RagPolicyAgent.create(llm, policyRetrievalTool, auditService);
     List<Event> events = run(agent, HYBRID_QUERY);
 
     assertPolicyRetrieveCalled(events);

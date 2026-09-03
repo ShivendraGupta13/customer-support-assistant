@@ -41,6 +41,7 @@ class HitlApprovalEvalTest {
 
   @Autowired PaymentRepository payments;
   @Autowired RefundTool refundTool;
+  @Autowired com.poc.adk.guardrails.GuardrailAuditService auditService;
 
   @BeforeEach
   void resetOrd5010PaymentToCaptured() {
@@ -58,7 +59,7 @@ class HitlApprovalEvalTest {
             ScriptedLlm.functionCall("process_refund", Map.of("order_id", ORDER_ID)),
             ScriptedLlm.text("Refund for ORD-5010 has been processed."));
 
-    LlmAgent agent = HitlApprovalAgent.create(llm);
+    LlmAgent agent = HitlApprovalAgent.create(llm, refundTool, auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();
@@ -98,7 +99,7 @@ class HitlApprovalEvalTest {
             ScriptedLlm.functionCall("process_refund", Map.of("order_id", ORDER_ID)),
             ScriptedLlm.text("The refund was not approved."));
 
-    LlmAgent agent = HitlApprovalAgent.create(llm);
+    LlmAgent agent = HitlApprovalAgent.create(llm, refundTool, auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();

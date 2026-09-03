@@ -16,9 +16,15 @@ import java.util.Optional;
  */
 public final class OutputGuardrailCallback implements AfterModelCallbackSync {
 
-  public static final OutputGuardrailCallback INSTANCE = new OutputGuardrailCallback();
+  private final GuardrailAuditService auditService;
 
-  private OutputGuardrailCallback() {}
+  public OutputGuardrailCallback(GuardrailAuditService auditService) {
+    this.auditService = auditService;
+  }
+
+  public OutputGuardrailCallback() {
+    this(null);
+  }
 
   @Override
   public Optional<LlmResponse> call(CallbackContext callbackContext, LlmResponse llmResponse) {
@@ -28,7 +34,9 @@ public final class OutputGuardrailCallback implements AfterModelCallbackSync {
     }
 
     if (!llmResponse.partial().orElse(false)) {
-      GuardrailAuditService.record(callbackContext.sessionId(), "OUTPUT", "PII_CARD", "MASKED");
+      if (auditService != null) {
+        auditService.record(callbackContext.sessionId(), "OUTPUT", "PII_CARD", "MASKED");
+      }
     }
 
     Content original = llmResponse.content().orElseThrow();

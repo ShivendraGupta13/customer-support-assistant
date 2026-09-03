@@ -11,26 +11,15 @@ import java.util.UUID;
  */
 public final class GuardrailAuditService {
 
-  private static volatile GuardrailAuditService instance;
-
   private final GuardrailAuditLogRepository logs;
 
   public GuardrailAuditService(GuardrailAuditLogRepository logs) {
     this.logs = logs;
-    instance = this;
   }
 
-  public static void record(
+  public void record(
       String sessionId, String direction, String ruleTriggered, String action) {
-    current().write(sessionId, direction, ruleTriggered, action);
-  }
-
-  private static GuardrailAuditService current() {
-    GuardrailAuditService current = instance;
-    if (current == null) {
-      throw new IllegalStateException("GuardrailAuditService not initialized");
-    }
-    return current;
+    write(sessionId, direction, ruleTriggered, action);
   }
 
   private void write(String sessionId, String direction, String ruleTriggered, String action) {

@@ -31,6 +31,18 @@ import org.springframework.context.annotation.Import;
 @Import({ToolIntegrationConfig.class, GuardrailIntegrationConfig.class})
 class ParallelInvestigationEvalTest {
 
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.tools.PaymentHistoryTool paymentHistoryTool;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.tools.ShipmentTrackingTool shipmentTrackingTool;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.tools.FraudSignalTool fraudSignalTool;
+
+  @org.springframework.beans.factory.annotation.Autowired
+  private com.poc.adk.guardrails.GuardrailAuditService auditService;
+
   @Test
   void layer3_threeCheckToolCallsThenAggregator_withoutStrictOrder() {
     ScriptedLlm paymentLlm =
@@ -51,7 +63,15 @@ class ParallelInvestigationEvalTest {
                 "Risk report: payment CAPTURED; shipment present; fraud MULTIPLE_SHIPPING_ADDRESSES score 0.82."));
 
     SequentialAgent agent =
-        ParallelInvestigationAgent.create(paymentLlm, shipmentLlm, fraudLlm, aggregatorLlm);
+        ParallelInvestigationAgent.create(
+            paymentLlm,
+            shipmentLlm,
+            fraudLlm,
+            aggregatorLlm,
+            paymentHistoryTool,
+            shipmentTrackingTool,
+            fraudSignalTool,
+            auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();

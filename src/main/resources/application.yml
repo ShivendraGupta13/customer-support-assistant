@@ -3,6 +3,7 @@ server:
 
 adk:
   agents:
+    loader: spring
     source-dir: target
 
 observability:

@@ -11,10 +11,14 @@ import com.google.genai.types.FunctionCall;
 import com.google.genai.types.Part;
 import com.poc.adk.agents.singleagent.SingleAgent;
 import com.poc.adk.eval.ScriptedLlm;
+import com.poc.adk.guardrails.GuardrailAuditService;
 import com.poc.adk.integration.config.ToolIntegrationConfig;
 import java.util.List;
 import java.util.Map;
+
+import com.poc.adk.tools.OrderLookupTool;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
 
@@ -29,6 +33,12 @@ import org.springframework.context.annotation.Import;
 @Import({ToolIntegrationConfig.class, com.poc.adk.integration.config.GuardrailIntegrationConfig.class})
 class SingleAgentEvalTest {
 
+  @Autowired
+  private OrderLookupTool orderLookupTool;
+
+  @Autowired
+  private GuardrailAuditService auditService;
+
   @Test
   void layer3_step1_emitsOrderLookupToolCallForOrd5001() {
     ScriptedLlm llm =
@@ -36,7 +46,7 @@ class SingleAgentEvalTest {
             ScriptedLlm.functionCall("order_lookup", Map.of("order_id", "ORD-5001")),
             ScriptedLlm.text("Order ORD-5001 status is DELAYED."));
 
-    LlmAgent agent = SingleAgent.create(llm);
+    LlmAgent agent = SingleAgent.create(llm, orderLookupTool, auditService);
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =
         runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();

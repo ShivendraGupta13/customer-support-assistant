@@ -9,6 +9,7 @@ import com.google.adk.tools.FunctionTool;
 import com.poc.adk.agents.common.AgentModels;
 import com.poc.adk.agents.common.AgentPrompts;
 import com.poc.adk.agents.common.ContextLlm;
+import com.poc.adk.guardrails.GuardrailAuditService;
 import com.poc.adk.guardrails.Guardrails;
 import com.poc.adk.tools.FraudSignalTool;
 import com.poc.adk.tools.PaymentHistoryTool;
@@ -21,10 +22,25 @@ import com.poc.adk.tools.ShipmentTrackingTool;
 public final class ParallelInvestigationAgent {
 
   public static final BaseAgent ROOT_AGENT =
-      create(new ContextLlm(), new ContextLlm(), new ContextLlm(), new ContextLlm());
+      create(
+          new ContextLlm(),
+          new ContextLlm(),
+          new ContextLlm(),
+          new ContextLlm(),
+          new PaymentHistoryTool(null),
+          new ShipmentTrackingTool(null),
+          new FraudSignalTool(null),
+          null);
 
   public static SequentialAgent create(
-      BaseLlm paymentModel, BaseLlm shipmentModel, BaseLlm fraudModel, BaseLlm aggregatorModel) {
+      BaseLlm paymentModel,
+      BaseLlm shipmentModel,
+      BaseLlm fraudModel,
+      BaseLlm aggregatorModel,
+      PaymentHistoryTool paymentHistoryTool,
+      ShipmentTrackingTool shipmentTrackingTool,
+      FraudSignalTool fraudSignalTool,
+      GuardrailAuditService auditService) {
     LlmAgent paymentCheck =
         Guardrails.apply(
                 LlmAgent.builder()
@@ -32,11 +48,12 @@ public final class ParallelInvestigationAgent {
                     .description("Payment status check")
                     .model(paymentModel)
                     .instruction(AgentPrompts.load("prompts/demo-parallel-payment.v1.md"))
-                    .tools(FunctionTool.create(PaymentHistoryTool.class, "paymentHistory"))
+                    .tools(FunctionTool.create(paymentHistoryTool, "paymentHistory"))
                     .outputKey("payment_status")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LlmAgent shipmentCheck =
@@ -46,11 +63,12 @@ public final class ParallelInvestigationAgent {
                     .description("Shipment status check")
                     .model(shipmentModel)
                     .instruction(AgentPrompts.load("prompts/demo-parallel-shipment.v1.md"))
-                    .tools(FunctionTool.create(ShipmentTrackingTool.class, "shipmentTracking"))
+                    .tools(FunctionTool.create(shipmentTrackingTool, "shipmentTracking"))
                     .outputKey("shipment_status")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     LlmAgent fraudCheck =
@@ -60,11 +78,12 @@ public final class ParallelInvestigationAgent {
                     .description("Fraud signal check")
                     .model(fraudModel)
                     .instruction(AgentPrompts.load("prompts/demo-parallel-fraud.v1.md"))
-                    .tools(FunctionTool.create(FraudSignalTool.class, "fraudSignal"))
+                    .tools(FunctionTool.create(fraudSignalTool, "fraudSignal"))
                     .outputKey("fraud_signal")
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     ParallelAgent fanOut =
@@ -83,7 +102,8 @@ public final class ParallelInvestigationAgent {
                     .instruction(AgentPrompts.load("prompts/demo-parallel-aggregator.v1.md"))
                     .generateContentConfig(AgentModels.temperatureZero())
                     .disallowTransferToParent(true)
-                    .disallowTransferToPeers(true))
+                    .disallowTransferToPeers(true),
+                auditService)
             .build();
 
     return SequentialAgent.builder()
@@ -91,6 +111,25 @@ public final class ParallelInvestigationAgent {
         .description("Parallel risk assessment then aggregator")
         .subAgents(fanOut, aggregator)
         .build();
+  }
+
+  public static SequentialAgent create(
+      BaseLlm paymentModel,
+      BaseLlm shipmentModel,
+      BaseLlm fraudModel,
+      BaseLlm aggregatorModel,
+      PaymentHistoryTool paymentHistoryTool,
+      ShipmentTrackingTool shipmentTrackingTool,
+      FraudSignalTool fraudSignalTool) {
+    return create(
+        paymentModel,
+        shipmentModel,
+        fraudModel,
+        aggregatorModel,
+        paymentHistoryTool,
+        shipmentTrackingTool,
+        fraudSignalTool,
+        null);
   }
 
   private ParallelInvestigationAgent() {}

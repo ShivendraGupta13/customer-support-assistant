@@ -15,25 +15,21 @@ public final class RefundTool {
 
   private static final BigDecimal CONFIRMATION_THRESHOLD = new BigDecimal("200");
 
-  private static volatile RefundTool instance;
-
   private final OrderRepository orders;
   private final PaymentRepository payments;
 
   public RefundTool(OrderRepository orders, PaymentRepository payments) {
     this.orders = orders;
     this.payments = payments;
-    instance = this;
   }
 
   @Schema(name = "process_refund", description = "Process a refund for a Northwind order")
-  public static Map<String, Object> processRefund(
+  public Map<String, Object> processRefund(
       @Schema(name = "order_id", description = "Order id, for example ORD-5010") String orderId,
       @Schema(name = "toolContext") ToolContext toolContext) {
-    RefundTool tool = current();
-    return tool.orders
+    return orders
         .findById(orderId)
-        .map(order -> tool.refund(order, toolContext))
+        .map(order -> refund(order, toolContext))
         .orElseGet(() -> Map.of("status", "not_found", "order_id", orderId));
   }
 
@@ -85,13 +81,5 @@ public final class RefundTool {
         "order_id", order.getId(),
         "amount", order.getAmount(),
         "payment_status", "REFUNDED");
-  }
-
-  private static RefundTool current() {
-    RefundTool current = instance;
-    if (current == null) {
-      throw new IllegalStateException("RefundTool not initialized");
-    }
-    return current;
   }
 }
