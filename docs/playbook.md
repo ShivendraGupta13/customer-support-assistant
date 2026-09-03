@@ -59,11 +59,11 @@ docker compose -f docker/docker-compose.yml up -d
 
 ```bash
 mvn compile exec:java \
-  -Dexec.mainClass="com.northwind.support.SupportAssistantApplication" \
+  -Dexec.mainClass="com.poc.adk.SupportAssistantApplication" \
   -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"
 ```
 
-`SupportAssistantApplication` is the `@SpringBootApplication` (scanning `com.northwind.support` and `com.google.adk.web`), so it boots the Dev UI directly — no `AdkWebServer.start(...)` call.
+`SupportAssistantApplication` is the `@SpringBootApplication` (scanning `com.poc.adk` and `com.google.adk.web`), so it boots the Dev UI directly — no `AdkWebServer.start(...)` call.
 
 ### Verify
 

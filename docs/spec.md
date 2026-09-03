@@ -9,7 +9,7 @@ Build a single Spring Boot / Maven application as the interaction surface for le
 - All four memory types, RAG, guardrails
 - Observability (OTel + Langfuse) and evaluation
 
-Our own `@SpringBootApplication` scans both `com.northwind.support` and ADK's `com.google.adk.web` (from `google-adk-dev`), so the Dev UI and REST API come up in our context. One concrete business scenario teaches all of the above.
+Our own `@SpringBootApplication` scans both `com.poc.adk` and ADK's `com.google.adk.web` (from `google-adk-dev`), so the Dev UI and REST API come up in our context. One concrete business scenario teaches all of the above.
 
 This is a **technology-learning POC**, not a production system.
 
@@ -32,8 +32,8 @@ This is a **technology-learning POC**, not a production system.
 | Concern          | Choice                                                                                                                                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                  |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Language         | Java 25                                                                                                                                                                                                                                    | `google-adk` jars are compiled for Java 17 target; run fine as a dependency on a Java 25 JDK (forward-compatible bytecode).                                                                                                                                                                                            |
-| Framework        | Spring Boot **4.0.2** (transitive via `google-adk-dev` 1.9.0 — do not override unless Architecture spike validates)                                                                                                                        | `SupportAssistantApplication` **is** the `@SpringBootApplication`, with `scanBasePackages = {"com.northwind.support", "com.google.adk.web"}`. See Application Bootstrap below.                                                                                                                                           |
-| Build            | Maven                                                                                                                                                                                                                                      | Single module, single `pom.xml`. `exec-maven-plugin` launches `com.northwind.support.SupportAssistantApplication`. Pin: `google-adk` / `google-adk-dev` **1.9.0**, `java.version` **25**. Run `mvn -q dependency:tree -Dincludes=org.springframework.boot` after first build to confirm effective Spring Boot version. |
+| Framework        | Spring Boot **4.0.2** (transitive via `google-adk-dev` 1.9.0 — do not override unless Architecture spike validates)                                                                                                                        | `SupportAssistantApplication` **is** the `@SpringBootApplication`, with `scanBasePackages = {"com.poc.adk", "com.google.adk.web"}`. See Application Bootstrap below.                                                                                                                                           |
+| Build            | Maven                                                                                                                                                                                                                                      | Single module, single `pom.xml`. `exec-maven-plugin` launches `com.poc.adk.SupportAssistantApplication`. Pin: `google-adk` / `google-adk-dev` **1.9.0**, `java.version` **25**. Run `mvn -q dependency:tree -Dincludes=org.springframework.boot` after first build to confirm effective Spring Boot version. |
 | Agent framework  | `google-adk` + `google-adk-dev` (currently 1.9.x)                                                                                                                                                                                          | Core agents/tools/workflows + dev web server & REST API.                                                                                                                                                                                                                                                               |
 | Default LLM      | Ollama, `qwen2.5:7b`, via ADK's built-in `OpenAiCompatibleLlm`                                                                                                                                                                             | Ollama must already be running locally (`ollama serve`, model pulled) — out of scope for us to install.                                                                                                                                                                                                                |
 | Alternate LLMs   | Gemini (native ADK `Gemini` model class), Anthropic (native ADK `Claude` model class), OpenRouter (via `OpenAiCompatibleLlm`)                                                                                                              | Switchable via one config property, no code change.                                                                                                                                                                                                                                                                    |
@@ -108,10 +108,10 @@ Each `demo-*` module registers its own `public static final BaseAgent ROOT_AGENT
 
 ## Application Bootstrap
 
-`SupportAssistantApplication` is the sole `@SpringBootApplication`, scanning `com.northwind.support` and `com.google.adk.web`. That pulls ADK's Dev UI (`/dev-ui`), REST controllers (`/run`, `/run_sse`), and its beans into **our** Spring context — no `AdkWebServer.start(...)` call ([spring-boot#39943](https://github.com/spring-projects/spring-boot/issues/39943)).
+`SupportAssistantApplication` is the sole `@SpringBootApplication`, scanning `com.poc.adk` and `com.google.adk.web`. That pulls ADK's Dev UI (`/dev-ui`), REST controllers (`/run`, `/run_sse`), and its beans into **our** Spring context — no `AdkWebServer.start(...)` call ([spring-boot#39943](https://github.com/spring-projects/spring-boot/issues/39943)).
 
 ```java
-@SpringBootApplication(scanBasePackages = {"com.northwind.support", "com.google.adk.web"})
+@SpringBootApplication(scanBasePackages = {"com.poc.adk", "com.google.adk.web"})
 public class SupportAssistantApplication {
   public static void main(String[] args) {
     SpringApplication.run(SupportAssistantApplication.class, args);
@@ -120,13 +120,13 @@ public class SupportAssistantApplication {
 ```
 
 ```bash
-mvn compile exec:java -Dexec.mainClass=com.northwind.support.SupportAssistantApplication \
+mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
   -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"
 ```
 
 - **Agent loading** — default `CompiledAgentLoader` scans `--adk.agents.source-dir` for `public static final BaseAgent ROOT_AGENT` on each `demo-*` class.
 - **Spring wiring** — `ROOT_AGENT` is not a Spring bean; agent classes reach JPA/Qdrant/OTel via a static `AppServices` holder populated at startup (`ApplicationRunner`), before any request loads agent classes.
-- **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` in `com.northwind.support`; `AdkWebServer` already registers them.
+- **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` in `com.poc.adk`; `AdkWebServer` already registers them.
 
 ## Model Routing Config
 
@@ -381,7 +381,7 @@ Indicative layout — finalized in Architecture.
 
 ```
 pom.xml
-src/main/java/com/northwind/support/
+src/main/java/com/poc/adk/
   SupportAssistantApplication.java  → `@SpringBootApplication(scanBasePackages = {..., "com.google.adk.web"})`
   config/       → model-routing, observability, qdrant, data-seed config
   domain/       → JPA entities, repositories, seed loader
@@ -432,7 +432,7 @@ data/           → H2 file-mode database (gitignored)
 ### Checklist
 
 - Every topic listed in `Google ADK Java POC.md` maps to at least one module in the Capability Map and has a corresponding Playbook entry
-- `mvn compile exec:java -Dexec.mainClass=com.northwind.support.SupportAssistantApplication -Dexec.args="--adk.agents.source-dir=target/classes"` starts the app and lists all `demo-*` agents in the Web UI
+- `mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication -Dexec.args="--adk.agents.source-dir=target/classes"` starts the app and lists all `demo-*` agents in the Web UI
 - Each Playbook scenario, run manually against the Web UI/REST API with the default `qwen2.5:7b`/Ollama provider, produces the documented behavior
 - Switching `llm.provider` to `gemini` / `anthropic` / `openrouter` (with a valid key) works with no code change
 - Langfuse shows traces for agent/tool/model calls; Qdrant holds the RAG/semantic collections; H2 holds seeded domain + memory data
