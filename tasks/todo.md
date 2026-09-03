@@ -155,18 +155,19 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 **Acceptance criteria:**
 - [ ] `llm.provider` switches `ollama` | `gemini` | `anthropic` | `openrouter` via `ModelFactory` + `ModelRoutingProperties`
 - [ ] Default is Ollama `qwen2.5:7b` at `http://localhost:11434/v1/` as in spec
-- [ ] Unit test covers the enum switch with no network
+- [ ] `ModelFactory` is reachable via `AppServices` (agents are not Spring beans). Unit test covers the enum switch with no network
 
 **Verification:**
 - [ ] Tests pass: `ModelFactory` unit test
 - [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: n/a until a demo agent exists
+- [ ] Manual check: provider switch (Playbook D11) is Task 12
 
-**Dependencies:** Task 3
+**Dependencies:** Task 3, Task 5
 
 **Files likely touched:**
 - `src/main/java/com/poc/adk/config/ModelRoutingProperties.java`
 - `src/main/java/com/poc/adk/config/ModelFactory.java` (package may match architecture)
+- `src/main/java/com/poc/adk/bootstrap/AppServices.java`
 - `src/main/resources/application.yml`
 - `src/test/java/.../ModelFactoryTest.java`
 
@@ -185,7 +186,7 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 - [ ] Build succeeds: `mvn -q compile`
 - [ ] Manual check: Langfuse UI reachable; a later demo (Task 12) shows one trace per turn
 
-**Dependencies:** Task 3, Task 4, Task 6
+**Dependencies:** Task 3, Task 4, Task 5, Task 6
 
 **Files likely touched:**
 - `src/main/java/com/poc/adk/config/ObservabilityConfig.java`
@@ -206,7 +207,7 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 
 **Acceptance criteria:**
 - [ ] `OrderLookupTool`, `PaymentHistoryTool`, `ShipmentTrackingTool`, `FraudSignalTool` read via `AppServices` / repositories
-- [ ] `ToolEvalTest`: `orderLookup("ORD-5001")` → DELAYED; empty/not-found for `ORD-9999`; fraud `MULTIPLE_SHIPPING_ADDRESSES` score 0.82 on `ORD-5002`
+- [ ] `ToolEvalTest`: `orderLookup("ORD-5001")` → DELAYED; empty/not-found for `ORD-9999`; fraud `MULTIPLE_SHIPPING_ADDRESSES` score 0.82 on `ORD-5002`; payment for `ORD-5001` captured; shipment `SHP-7001` is `IN_TRANSIT_DELAYED` / 6 days
 
 **Verification:**
 - [ ] Tests pass: `mvn test -Dtest=ToolEvalTest`
@@ -251,12 +252,13 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 
 **Acceptance criteria:**
 - [ ] `InputGuardrailCallback` / `OutputGuardrailCallback`, `PiiMasker`, `PromptInjectionHeuristics`, `GuardrailAuditService` → H2
+- [ ] `beforeToolCallback` / `afterToolCallback` are audit-only hooks (no second safety model); a tool invocation writes an audit row
 - [ ] Layer 0 tests: injection/jailbreak flagged; card number masked; audit row written. No second LLM judge
 
 **Verification:**
 - [ ] Tests pass: focused guardrail unit tests (no LLM)
 - [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: Playbook cross-cutting queries deferred to after Task 12
+- [ ] Manual check: Playbook guardrail queries are Task 12
 
 **Dependencies:** Task 5, Task 6
 
@@ -357,11 +359,14 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Acceptance criteria:**
 - [ ] Agent selectable in Dev UI; Playbook §1 step 1 reports DELAYED via `order_lookup`; step 2 resolves “it” to ORD-5001
 - [ ] Layer 2 frozen-tool fixture and Layer 3 events include `tool_call` → `order_lookup` for step 1
+- [ ] Playbook guardrail queries (Ignore instructions / DAN / card `4111-…`) refused or masked; H2 audit row where applicable
+- [ ] Langfuse: one trace per turn with tool and model child spans; token usage / latency populated where available
+- [ ] If a cloud key is set: switch `llm.provider`, restart, rerun §1 — same behavior, no code change (Playbook D11)
 
 **Verification:**
 - [ ] Tests pass: Layer 2/3 cases for this agent
 - [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: Playbook §1 in Web UI; Langfuse one trace per turn
+- [ ] Manual check: Playbook §1 + Cross-Cutting Guardrails + Observability D10; D11 if a cloud key is present
 
 **Dependencies:** Tasks 6, 7, 8, 9, 10
 
@@ -450,9 +455,10 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Acceptance criteria:**
 - [ ] ORD-5010 (350) emits `adk_request_confirmation`; FunctionResponse shape matches architecture §2.3
 - [ ] Approve path refunds; reject path leaves H2 unchanged; live demo is Web UI dialog, not Postman
+- [ ] Layer 2 fixture: frozen order JSON amount 350 / threshold 200 → requests approval; does not claim refund completed
 
 **Verification:**
-- [ ] Tests pass: Layer 3 `InMemoryRunner` injects `confirmed: true/false`
+- [ ] Tests pass: Layer 2 eval fixture + Layer 3 `InMemoryRunner` injects `confirmed: true/false`
 - [ ] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §5 Approve and Reject in Dev UI
 
@@ -461,7 +467,7 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Files likely touched:**
 - `src/main/java/com/poc/adk/tools/RefundTool.java`
 - `src/main/java/com/poc/adk/agents/hitl/`
-- prompts + Layer 3 test
+- prompts + `demo-hitl-approval.v1.eval.json` + Layer 3 test
 
 **Estimated scope:** Medium: 3-5 files
 

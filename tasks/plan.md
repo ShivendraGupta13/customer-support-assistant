@@ -34,8 +34,8 @@ ADK session contract (Task 2) ──► Playbook §8, Task 19, Layer 3 memory te
 
 bootstrap stub (Task 3)
     ├── docker-compose (Task 4, parallel)
-    ├── model-routing (Task 6)
-    └── observability (Task 7, needs 4 + 6)
+    ├── model-routing (Task 6, needs 5 — ModelFactory on AppServices)
+    └── observability (Task 7, needs 4 + 5 + 6)
 
 rag-index (Tasks 11a–11c) needs 3, 4, 5
 demo-single-agent (Task 12) needs 6–10
@@ -122,8 +122,8 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 
 ## Parallelization Opportunities
 
-- **Safe to parallelize:** Task 1 ∥ Task 2; Task 4 ∥ Tasks 1–3; Task 6 ∥ Task 5 after Task 3; Tasks 8 ∥ 9 after Task 5; Task 11a ∥ early Phase 1
-- **Must be sequential:** Task 5 after 1 and 3; Task 7 after 4 and 6; Task 11c after 11a/11b and 4; each demo after its infra; Task 19 after Task 2’s bind_customer decision
+- **Safe to parallelize:** Task 1 ∥ Task 2; Task 4 ∥ Tasks 1–3; Tasks 8 ∥ 9 after Task 5; Task 11a ∥ early Phase 1
+- **Must be sequential:** Task 5 after 1 and 3; Task 6 after 5; Task 7 after 4, 5, and 6; Task 11c after 11a/11b and 4; each demo after its infra; Task 19 after Task 2’s bind_customer decision
 - **Needs coordination:** session JSON contract (Task 2) before personalization and Layer 3 memory tests
 
 ## Risks and Mitigations
