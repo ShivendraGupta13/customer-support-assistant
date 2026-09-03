@@ -11,8 +11,8 @@ import org.springframework.context.annotation.Configuration;
 public class ObservabilityIntegrationConfig {
 
   @Bean
-  Tracer tracer(OpenTelemetrySdk openTelemetrySdk) {
-    Tracer tracer = openTelemetrySdk.getTracer(ObservabilityConfig.INSTRUMENTATION_NAME);
+  Tracer tracer(OpenTelemetrySdk langfuseOpenTelemetrySdk) {
+    Tracer tracer = langfuseOpenTelemetrySdk.getTracer(ObservabilityConfig.INSTRUMENTATION_NAME);
     TracingContext.initialize(tracer);
     return tracer;
   }

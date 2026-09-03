@@ -30,8 +30,23 @@ class ObservabilityIntegrationConfigTest {
     contextRunner.run(
         context -> {
           assertThat(context).hasNotFailed();
-          assertThat(context).hasBean("openTelemetrySdk");
+          assertThat(context).hasBean("langfuseOpenTelemetrySdk");
           assertThat(TracingContext.tracer()).isNotNull();
         });
+  }
+
+  @Test
+  void doesNotCollideWithAdkOpenTelemetrySdkBean() {
+    TracingContext.reset();
+
+    contextRunner
+        .withUserConfiguration(com.google.adk.web.config.OpenTelemetryConfig.class)
+        .run(
+            context -> {
+              assertThat(context).hasNotFailed();
+              assertThat(context).hasBean("openTelemetrySdk");
+              assertThat(context).hasBean("langfuseOpenTelemetrySdk");
+              assertThat(TracingContext.tracer()).isNotNull();
+            });
   }
 }

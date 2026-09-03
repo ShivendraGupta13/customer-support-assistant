@@ -210,13 +210,13 @@ mvn compile exec:java
 **Description:** Java function tools wrap domain data so demo agents can look up orders, payments, shipments, and fraud without hallucinating rows.
 
 **Acceptance criteria:**
-- [ ] `OrderLookupTool`, `PaymentHistoryTool`, `ShipmentTrackingTool`, `FraudSignalTool` read via `ToolDependencies` / repositories (`ToolDependencies` populated by `ToolIntegrationConfig` `@Bean` during context refresh)
-- [ ] `ToolEvalTest`: `orderLookup("ORD-5001")` → DELAYED; empty/not-found for `ORD-9999`; fraud `MULTIPLE_SHIPPING_ADDRESSES` score 0.82 on `ORD-5002`; payment for `ORD-5001` captured; shipment `SHP-7001` is `IN_TRANSIT_DELAYED` / 6 days
+- [x] `OrderLookupTool`, `PaymentHistoryTool`, `ShipmentTrackingTool`, `FraudSignalTool` are each a Spring bean that receives only its repository (`ToolIntegrationConfig` `@Bean` during context refresh); methods stay static for `FunctionTool.create(Class, methodName)`
+- [x] `ToolEvalTest`: `orderLookup("ORD-5001")` → DELAYED; empty/not-found for `ORD-9999`; fraud `MULTIPLE_SHIPPING_ADDRESSES` score 0.82 on `ORD-5002`; payment for `ORD-5001` captured; shipment `SHP-7001` is `IN_TRANSIT_DELAYED` / 6 days
 
 **Verification:**
-- [ ] Tests pass: `mvn test -Dtest=ToolEvalTest`
-- [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: n/a (Layer 0 is the proof)
+- [x] Tests pass: `mvn test -Dtest=ToolEvalTest`
+- [x] Build succeeds: `mvn -q test`
+- [x] Manual check: n/a (Layer 0 is the proof)
 
 **Dependencies:** Task 5
 
@@ -225,7 +225,6 @@ mvn compile exec:java
 - `src/main/java/com/poc/adk/tools/PaymentHistoryTool.java`
 - `src/main/java/com/poc/adk/tools/ShipmentTrackingTool.java`
 - `src/main/java/com/poc/adk/tools/FraudSignalTool.java`
-- `src/main/java/com/poc/adk/integration/adk/ToolDependencies.java`
 - `src/main/java/com/poc/adk/integration/config/ToolIntegrationConfig.java`
 - `src/test/java/.../ToolEvalTest.java`
 
@@ -236,7 +235,7 @@ mvn compile exec:java
 **Description:** Long-term preference lookup reads `customer_id` from session state (`ToolContext`), not from the user message.
 
 **Acceptance criteria:**
-- [ ] `CustomerPreferenceTool` returns EMAIL for CUST-1001 and SMS for CUST-1002 from H2 via `ToolDependencies` (preference repo lives in `commerce/customer/`; do not add a second holder)
+- [ ] `CustomerPreferenceTool` returns EMAIL for CUST-1001 and SMS for CUST-1002 from H2 via its own Spring bean + `CustomerPreferenceRepository` (preference repo lives in `commerce/customer/`)
 - [ ] Tool does not parse customer id from chat text
 
 **Verification:**
@@ -248,6 +247,7 @@ mvn compile exec:java
 
 **Files likely touched:**
 - `src/main/java/com/poc/adk/memory/CustomerPreferenceTool.java`
+- `src/main/java/com/poc/adk/integration/config/ToolIntegrationConfig.java`
 - `src/test/java/.../` (preference cases)
 
 **Estimated scope:** Small: 1-2 files

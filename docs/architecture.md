@@ -63,17 +63,17 @@ flowchart LR
 
 1. `main()` → `SpringApplication.run` starts our context.
 2. Our `@Configuration` classes build: JPA/H2, `QdrantClient` (gRPC, `:6334`), the `OpenTelemetrySdk` (OTLP/HTTP exporter → Langfuse), and `ModelFactory`.
-3. During context refresh (not an `ApplicationRunner`), `@Bean` methods populate module-scoped static bridges in `integration/adk/` so agent classes can use them (they are not Spring beans — see below). Hibernate `ddl-auto=create-drop` creates H2 tables from JPA entities (mapped 1:1 to `schema.sql`); business rows come from `data.sql` only. After RAG exists, a separate `PolicyChunkIndexer` `ApplicationRunner` embeds policy markdown into Qdrant if the collection is empty — it must never `save()` / `INSERT` Northwind tables.
+3. During context refresh (not an `ApplicationRunner`), `@Bean` methods populate `LlmContext` / `TracingContext` / `VectorContext` and construct one Spring bean per function tool (each with only its repository). Hibernate `ddl-auto=create-drop` creates H2 tables from JPA entities (mapped 1:1 to `schema.sql`); business rows come from `data.sql` only. After RAG exists, a separate `PolicyChunkIndexer` `ApplicationRunner` embeds policy markdown into Qdrant if the collection is empty — it must never `save()` / `INSERT` Northwind tables.
 4. `AdkWebServer`'s own auto-configuration registers its beans (`sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter` — all `InMemory*` by default) [[2]](#references).
 5. `CompiledAgentLoader` (`@Service("agentLoader")`, active by default via `@ConditionalOnProperty(matchIfMissing=true)`) scans `--adk.agents.source-dir=target` for classes exposing `public static final BaseAgent ROOT_AGENT`, and registers one entry per `demo-*` agent in the Web UI dropdown [[3]](#references). Pass `target` (Maven build output root), not `target/classes` — the latter treats package folders as agent units and finds none.
 
-Step 3 must complete before step 5 can serve a request: agent classes are loaded reflectively by class-path scanning, not instantiated by Spring, so they are never `@Autowired`. Each tool or agent imports only the bridge it needs (`OrderLookupTool` → `ToolDependencies`, `ROOT_AGENT` construction → `LlmContext`) — not a single application-wide holder. Bridges are populated in `@Bean` methods during context refresh so they are non-null before the loader serves a request; an `ApplicationRunner` is too late.
+Step 3 must complete before step 5 can serve a request: agent classes are loaded reflectively by class-path scanning, not instantiated by Spring, so they are never `@Autowired`. Chat/OTel/Qdrant use module-scoped static bridges (`LlmContext`, `TracingContext`, `VectorContext`). Each tool is its own Spring bean and receives only the repository it needs (`OrderLookupTool(OrderRepository)`, not a shared `ToolDependencies` bag). Tool methods stay **static** so `FunctionTool.create(Class, methodName)` can run while `CompiledAgentLoader` reads `ROOT_AGENT` in its constructor — that is during context refresh, in undefined order relative to our tool beans. The repository is resolved at **invocation** time, after every singleton exists. An `ApplicationRunner` is too late for bridges the static `ROOT_AGENT` graph reads.
 
 ### 2.2 Bean-name collision — resolved
 
-`AdkWebServer` declares `@Bean public BaseSessionService sessionService()`, `@Bean public BaseArtifactService artifactService()`, and `@Bean public BaseMemoryService memoryService()`, all returning `InMemory*` implementations [[2]](#references). Spring Boot rejects a second bean definition with the same name by default, so `com.poc.adk` **must not** declare beans named `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` (already stated as a boundary in `spec.md`).
+`AdkWebServer` declares `@Bean public BaseSessionService sessionService()`, `@Bean public BaseArtifactService artifactService()`, and `@Bean public BaseMemoryService memoryService()`, all returning `InMemory*` implementations [[2]](#references). `OpenTelemetryConfig` (1.9.0) declares `@Bean OpenTelemetry openTelemetrySdk(...)` plus `sdkTracerProvider`, `apiServerSpanExporter`, and `apiServerSpanExporterConfig`. Spring Boot rejects a second bean definition with the same name by default, so `com.poc.adk` **must not** declare beans named `sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter`, `openTelemetrySdk`, `sdkTracerProvider`, `apiServerSpanExporter`, or `apiServerSpanExporterConfig` (already stated as a boundary in `spec.md`). Langfuse export uses a separately named `langfuseOpenTelemetrySdk` bean.
 
-**Consequence for memory architecture:** our H2-backed long-term memory and Qdrant-backed semantic memory are **not** wired through ADK's `BaseMemoryService` SPI — that stays the default `InMemoryMemoryService`, unused by our agents. Instead, `memory-services` is a package of plain Java services invoked as **function tools** (`CustomerPreferenceTool`), reached via `ToolDependencies` (the preference repository lives with the customer aggregate), exactly as the Capability Map models them (tools, not a memory-service override). Short-term memory runs on ADK's default `InMemorySessionService` — acceptable per `spec.md` (single-instance POC; short-term memory is not required to survive a restart).
+**Consequence for memory architecture:** our H2-backed long-term memory and Qdrant-backed semantic memory are **not** wired through ADK's `BaseMemoryService` SPI — that stays the default `InMemoryMemoryService`, unused by our agents. Instead, `memory-services` is a package of plain Java services invoked as **function tools** (`CustomerPreferenceTool`), constructed as its own Spring bean with `CustomerPreferenceRepository` (the preference repository lives with the customer aggregate), exactly as the Capability Map models them (tools, not a memory-service override). Short-term memory runs on ADK's default `InMemorySessionService` — acceptable per `spec.md` (single-instance POC; short-term memory is not required to survive a restart).
 
 ### 2.3 HITL `FunctionResponse` shape — resolved
 
@@ -126,13 +126,12 @@ src/main/java/com/poc/adk/
     ObservabilityConfig.java      // OpenTelemetrySdk + OTLP exporter bean
     QdrantConfig.java             // QdrantClient bean + collection bootstrap (idempotent)
   integration/
-    adk/                          // static bridges for non-Spring ROOT_AGENT / tools
-      ToolDependencies.java       // repos needed by shared-tools + CustomerPreferenceTool
+    adk/                          // static bridges for non-Spring ROOT_AGENT (not tools)
       LlmContext.java             // ModelFactory + BaseLlm
       TracingContext.java         // Tracer / OTel helpers
       VectorContext.java          // QdrantClient (Task 11)
-    config/                       // @Bean methods that populate the bridges (context refresh)
-      ToolIntegrationConfig.java
+    config/                       // @Bean methods during context refresh
+      ToolIntegrationConfig.java  // one @Bean per tool; each tool holds only its repo
       LlmIntegrationConfig.java
       ObservabilityIntegrationConfig.java
   tools/

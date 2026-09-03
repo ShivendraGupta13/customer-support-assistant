@@ -125,8 +125,8 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 ```
 
 - **Agent loading** — default `CompiledAgentLoader` scans `--adk.agents.source-dir` for `public static final BaseAgent ROOT_AGENT` on each `demo-*` class.
-- **Spring wiring** — `ROOT_AGENT` is not a Spring bean; agent classes reach JPA/Qdrant/OTel via module-scoped static bridges in `integration/adk/` (`ToolDependencies`, `LlmContext`, `TracingContext`, `VectorContext`), each populated by a `@Bean` during context refresh. Do not use a single `AppServices` holder or an `ApplicationRunner` for this wiring.
-- **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` in `com.poc.adk`; `AdkWebServer` already registers them.
+- **Spring wiring** — `ROOT_AGENT` is not a Spring bean. Chat/OTel/Qdrant use module-scoped static bridges in `integration/adk/` (`LlmContext`, `TracingContext`, `VectorContext`), each populated by a `@Bean` during context refresh. Each function tool is its own Spring bean and receives only the repository it needs; methods stay static so `FunctionTool.create(Class, methodName)` does not capture the instance while `CompiledAgentLoader` constructs `ROOT_AGENT`. Do not use a single `AppServices` / `ToolDependencies` holder or an `ApplicationRunner` for this wiring.
+- **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter`, `openTelemetrySdk`, `sdkTracerProvider`, `apiServerSpanExporter`, or `apiServerSpanExporterConfig` in `com.poc.adk`; `AdkWebServer` / `OpenTelemetryConfig` already register them.
 
 ## Memory
 

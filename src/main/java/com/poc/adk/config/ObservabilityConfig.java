@@ -20,7 +20,7 @@ public class ObservabilityConfig {
   public static final String INSTRUMENTATION_NAME = "com.poc.adk";
 
   @Bean(destroyMethod = "close")
-  OpenTelemetrySdk openTelemetrySdk(ObservabilityProperties properties) {
+  OpenTelemetrySdk langfuseOpenTelemetrySdk(ObservabilityProperties properties) {
     return create(properties);
   }
 
