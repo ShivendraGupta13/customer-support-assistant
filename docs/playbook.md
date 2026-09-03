@@ -30,7 +30,7 @@ This is the manual test script for every feature built in this project. For each
 
 1. `ollama pull qwen2.5:7b` and `ollama serve` running on `http://localhost:11434`.
 2. `docker compose -f docker/docker-compose.yml up -d` — starts Qdrant + Langfuse (+ their dependencies).
-3. `mvn compile exec:java -Dexec.mainClass="com.northwind.support.SupportAssistantApplication" -Dexec.args="--server.port=8000"` (Architecture may use `-Dserver.port=8000` instead if `AdkWebServer.start()` drops CLI args).
+3. `mvn compile exec:java -Dexec.mainClass="com.northwind.support.SupportAssistantApplication" -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"` — our class is the `@SpringBootApplication` (scanning `com.northwind.support` and `com.google.adk.web`), so it boots the Dev UI directly; no `AdkWebServer.start(...)` call.
 4. Open `http://localhost:8000`. Confirm the agent dropdown lists every `demo-*` agent from the Capability Map.
 5. Confirm H2 seeded data loaded (app logs show seed count) and policy text files were embedded into Qdrant (app logs show collection populated).
 
