@@ -282,13 +282,13 @@ mvn compile exec:java
 **Description:** Author the four policy files so chunking, citations, and the hybrid trap are real — not invented at retrieval time.
 
 **Acceptance criteria:**
-- [ ] `refund-policy.md`, `shipping-policy.md`, `fraud-policy.md`, `loyalty-policy.md` use `##` / `###` sections
-- [ ] Tokens `NW-SHIP-EXC-04` and `NW-HP-1001` appear **only** in `loyalty-policy.md`; `shipping-policy.md` has weather-delay prose without those tokens
+- [x] `refund-policy.md`, `shipping-policy.md`, `fraud-policy.md`, `loyalty-policy.md` use `##` / `###` sections
+- [x] Tokens `NW-SHIP-EXC-04` and `NW-HP-1001` appear **only** in `loyalty-policy.md`; `shipping-policy.md` has weather-delay prose without those tokens
 
 **Verification:**
-- [ ] Tests pass: grep/assert in Task 11c; this task is content
-- [ ] Build succeeds: n/a
-- [ ] Manual check: files are under `src/main/resources/policies/`
+- [x] Tests pass: grep/assert in Task 11c; this task is content
+- [x] Build succeeds: n/a
+- [x] Manual check: files are under `src/main/resources/policies/`
 
 **Dependencies:** None (content). Indexing needs Task 3–5 later.
 
@@ -305,13 +305,13 @@ mvn compile exec:java
 **Description:** Header-aware chunks with citation metadata, and a 768-dim embedding client that fails fast on mismatch.
 
 **Acceptance criteria:**
-- [ ] `ChunkingService` splits on `##` then `###`, caps ~400 tokens, ~50-token overlap only on size-splits; payload fields `doc_id`, `source_path`, `section_heading`, `chunk_index`
-- [ ] `EmbeddingClient` calls Ollama embeddings and asserts `vector.length == 768` on first call
+- [x] `ChunkingService` splits on `##` then `###`, caps ~400 tokens, ~50-token overlap only on size-splits; payload fields `doc_id`, `source_path`, `section_heading`, `chunk_index`
+- [x] `EmbeddingClient` calls Ollama embeddings and asserts `vector.length == 768` on first call
 
 **Verification:**
-- [ ] Tests pass: chunking unit tests (no Qdrant); embedding dimension test may mock HTTP
-- [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: n/a
+- [x] Tests pass: chunking unit tests (no Qdrant); embedding dimension test may mock HTTP
+- [x] Build succeeds: `mvn -q test`
+- [x] Manual check: n/a
 
 **Dependencies:** Task 3, Task 11a
 
@@ -327,13 +327,13 @@ mvn compile exec:java
 **Description:** One Qdrant `queryAsync` with dense prefetch + BM25 prefetch + RRF. Prove hybrid beats dense-only on the planted codes without an LLM.
 
 **Acceptance criteria:**
-- [ ] `HybridRetriever` + `CitationFormatter`; collection `policy_chunks` (`dense` 768 Cosine, `lexical` BM25); `PolicyChunkIndexer` `ApplicationRunner` indexes policy markdown (not SQL, not `AppServicesInitializer`); `VectorContext` holds `QdrantClient`
-- [ ] `RetrievalEvalTest`: hybrid top-1 is the loyalty courtesy chunk; dense-only top-1 is not. If dense-only already wins, strengthen shipping-policy distractor — do not edit the agent prompt
+- [x] `HybridRetriever` + `CitationFormatter`; collection `policy_chunks` (`dense` 768 Cosine, `lexical` BM25); `PolicyChunkIndexer` `ApplicationRunner` indexes policy markdown (not SQL, not `AppServicesInitializer`); `VectorContext` holds `QdrantClient`
+- [x] `RetrievalEvalTest`: hybrid top-1 is the loyalty courtesy chunk; dense-only top-1 is not. If dense-only already wins, strengthen shipping-policy distractor — do not edit the agent prompt
 
 **Verification:**
-- [ ] Tests pass: `mvn test -Dtest=RetrievalEvalTest` (Qdrant up, no chat LLM)
-- [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: startup logs show collection populated
+- [x] Tests pass: `mvn test -Dtest=RetrievalEvalTest` (Qdrant up, no chat LLM)
+- [x] Build succeeds: `mvn -q test`
+- [x] Manual check: startup logs show collection populated
 
 **Dependencies:** Task 4, Task 5, Task 11a, Task 11b
 
@@ -349,7 +349,7 @@ mvn compile exec:java
 
 ## Checkpoint: Layers 0-1
 
-- [ ] `mvn test -Dtest=ToolEvalTest,RetrievalEvalTest` pass with no chat LLM
+- [x] `mvn test -Dtest=ToolEvalTest,RetrievalEvalTest` pass with no chat LLM
 - [ ] Application builds; Qdrant `policy_chunks` populated on start
 - [ ] Review with human before demo agents
 

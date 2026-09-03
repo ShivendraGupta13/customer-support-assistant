@@ -83,13 +83,13 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 - [x] Task 8: `shared-tools` + Layer 0
 - [x] Task 9: `memory-services`
 - [x] Task 10: `guardrails`
-- [ ] Task 11a: Policy markdown fixtures
-- [ ] Task 11b: Chunking + `EmbeddingClient`
-- [ ] Task 11c: Hybrid retriever + Layer 1
+- [x] Task 11a: Policy markdown fixtures
+- [x] Task 11b: Chunking + `EmbeddingClient`
+- [x] Task 11c: Hybrid retriever + Layer 1
 
 ### Checkpoint: Layers 0–1
 
-- [ ] `mvn test -Dtest=ToolEvalTest,RetrievalEvalTest` pass with no chat LLM
+- [x] `mvn test -Dtest=ToolEvalTest,RetrievalEvalTest` pass with no chat LLM
 - [ ] Qdrant `policy_chunks` populated on app start
 - [ ] Review with human before demo agents
 
