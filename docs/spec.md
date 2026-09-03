@@ -82,9 +82,9 @@ This request bundles many independently testable capabilities. Below is the deco
 | `model-routing`                 | `llm.provider` config + `ModelFactory` producing the right ADK `BaseLlm` (Ollama/Gemini/Anthropic/OpenRouter)                                                                        | Model configuration                                                                                        | —                                                                                 |
 | `observability`                 | OTel SDK setup, OTLP exporter to Langfuse, span/event capture around agent runs, tool calls, model calls                                                                             | Observability (traces, agent events, tool execution, token usage, latency, errors, cost, logs, metrics)    | `model-routing`                                                                   |
 | `shared-tools`                  | Java function tools wrapping domain data: order lookup, payment history, shipment tracking, fraud signal check                                                                       | Tool Calling (Java Functions, Database Tool, Custom Tools)                                                 | `domain-data`                                                                     |
-| `memory-services`               | Short-term (session state helpers), Long-term (H2-backed customer preferences), Episodic (H2-backed past tickets + similarity lookup), Semantic (Qdrant-backed facts/business rules) | Memory (all 4 types) + Memory comparison matrix                                                            | `domain-data`                                                                     |
+| `memory-services`               | Short-term (session state helpers), Long-term (H2-backed customer preferences), Episodic (H2-backed past tickets). Semantic memory is RAG over `policy_chunks` (`rag-index`), not a second Qdrant collection | Memory (all 4 types) + Memory comparison matrix                                                            | `domain-data`                                                                     |
 | `guardrails`                    | Before/after model & tool callbacks: input/output guardrails, PII masking, prompt-injection/jailbreak heuristics, basic content moderation                                           | Guardrails (all sub-topics)                                                                                | `model-routing`                                                                   |
-| `rag-index`                     | Markdown-header chunking + dense embeddings + lexical (full-text) index + RRF hybrid retrieval + citation formatting                                                                 | RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation)                      | `domain-data`, `memory-services` (shares Qdrant)                                  |
+| `rag-index`                     | Markdown-header chunking + dense embeddings + BM25 sparse + RRF hybrid retrieval + citation formatting                                                                               | RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation)                      | `domain-data`                                                                     |
 | `demo-single-agent`             | Single `LlmAgent` + tool calling + short-term memory — the "hello world" baseline                                                                                                    | Single Agent, Prompt management, Context window                                                            | `shared-tools`, `memory-services`, `guardrails`, `observability`, `model-routing` |
 | `demo-sequential-investigation` | `SequentialAgent`: gather order+payment+shipment → check policy (RAG) → draft resolution                                                                                             | Sequential workflow, Agent composition via `outputKey` chaining, Retry & error recovery on tool failure    | `demo-single-agent`'s shared infra                                                |
 | `demo-parallel-investigation`   | `ParallelAgent` fan-out (payment / shipment / fraud checks) → aggregator                                                                                                             | Parallel workflow, fan-out/fan-in composition                                                              | same infra                                                                        |
@@ -188,9 +188,8 @@ Switch `llm.provider` when Langfuse shows correct tools/retrieval but prose or r
 
 ### Qdrant (vectors)
 
-- One collection for policy-document embeddings (RAG, sourced from plain-text policy files, not H2)
-- One collection for semantic "facts / business rules," reused for episodic similarity search if useful
-- Exact collection schema finalized in Architecture
+- One collection (`policy_chunks`) for policy-document embeddings (RAG, sourced from plain-text policy files, not H2). That collection is also the semantic-memory demo (facts / business rules / policy knowledge). No second collection; long-term and episodic memory stay in H2.
+- Exact collection schema is in `architecture.md` §4.2.
 
 
 
@@ -223,7 +222,7 @@ We will write the policy files with several `##` sections on purpose, including 
 
 #### Default implementation
 
-Dense cosine search on `nomic-embed-text` vectors **plus** a Qdrant payload full-text index on `chunk_text`, fuse the two ranked lists with RRF in our Java retrieval code. Architecture may upgrade the lexical side to a named sparse BM25 vector if the Java client + our Qdrant image make that the shorter path; the Playbook contract does not change.
+Dense cosine search on `nomic-embed-text` vectors **plus** Qdrant BM25 (named sparse vector, server-side `qdrant/bm25` inference), fused with RRF in one Qdrant `query` (two prefetches). A payload full-text index is a filter and does not produce ranks, so it cannot feed RRF — see `architecture.md` §4.3. The Playbook contract does not change.
 
 #### Why hybrid is in the POC
 
@@ -386,7 +385,7 @@ src/main/java/com/poc/adk/
   config/       → model-routing, observability, qdrant, data-seed config
   domain/       → JPA entities, repositories, seed loader
   tools/        → shared Java function tools
-  memory/       → short/long-term/episodic/semantic memory services
+  memory/       → long-term and episodic tools (H2); semantic memory is `rag/` over policy_chunks
   guardrails/   → callbacks + PII/prompt-injection utilities
   rag/          → chunking, embedding, retrieval (dense + lexical + RRF), citation formatting
   agents/
@@ -435,7 +434,7 @@ data/           → H2 file-mode database (gitignored)
 - `mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication -Dexec.args="--adk.agents.source-dir=target/classes"` starts the app and lists all `demo-*` agents in the Web UI
 - Each Playbook scenario, run manually against the Web UI/REST API with the default `qwen2.5:7b`/Ollama provider, produces the documented behavior
 - Switching `llm.provider` to `gemini` / `anthropic` / `openrouter` (with a valid key) works with no code change
-- Langfuse shows traces for agent/tool/model calls; Qdrant holds the RAG/semantic collections; H2 holds seeded domain + memory data
+- Langfuse shows traces for agent/tool/model calls; Qdrant holds `policy_chunks`; H2 holds seeded domain + memory data
 - Layers 0–1 of the evaluation harness pass with no LLM (`ToolEvalTest`, `RetrievalEvalTest` including hybrid vs dense-only)
 - Layers 2–3 pass against the default Ollama provider (`PromptEvalTest`, `EvaluationHarnessTest`) without asserting exact prose
 

@@ -1,0 +1,567 @@
+# Architecture: Customer Support Investigation Assistant
+
+Status: **DRAFT — for review**
+
+This document describes *how* the system in `spec.md` is built: process topology, package/class structure, data schemas, and the runtime path each Playbook scenario takes. It does not restate product requirements, seed data, or acceptance criteria — see `spec.md` and `playbook.md` for those. Diagram IDs (`D0`–`D12`) match the table in `playbook.md` exactly so Playbook scenarios can cross-reference them.
+
+Diagrams use short labels; the surrounding prose holds the detail. Every ADK/Qdrant/Langfuse API fact below was verified against current official sources before being written down (per `spec.md` → Boundaries → Always). Citations are consolidated in [References](#references).
+
+**Stack lock (this review):** the app stays local (no GCP/AWS deploy). Embeddings, guardrails, observability, and vector search stay on the local stack. Hybrid retrieval is **BM25 + semantic dense**, fused with RRF — not two semantic models. Vertex AI Vector Search was considered and rejected (see [§8](#8-key-architecture-decisions)).
+
+---
+
+## 1. System Context — D0
+
+Single JVM process. `SupportAssistantApplication` is the only `@SpringBootApplication`; it hosts both our code and ADK's Dev UI/REST server in one Spring context (`scanBasePackages = {"com.poc.adk", "com.google.adk.web"}` — no `AdkWebServer.start(...)` call [[1]](#references)).
+
+```mermaid
+flowchart TB
+    subgraph Client
+        WebUI[ADK Web UI]
+        REST[REST client]
+    end
+
+    subgraph JVM[Spring Boot JVM]
+        AdkWeb[ADK Dev UI]
+        Loader[Agent loader]
+        Agents[demo agents]
+        Shared[tools / RAG / memory]
+        Routing[ModelFactory]
+        OTel[OTel exporter]
+    end
+
+    subgraph Data
+        H2[(H2)]
+        Qdrant[(Qdrant)]
+    end
+
+    subgraph LLM[Chat models]
+        Ollama[Ollama]
+        Gemini[Gemini]
+        Claude[Claude]
+        OpenRouter[OpenRouter]
+    end
+
+    Langfuse[(Langfuse)]
+
+    WebUI --> AdkWeb
+    REST --> AdkWeb
+    AdkWeb --> Loader
+    Loader --> Agents
+    Agents --> Shared
+    Agents --> Routing
+    Shared --> H2
+    Shared --> Qdrant
+    Routing --> Ollama
+    Routing --> Gemini
+    Routing --> Claude
+    Routing --> OpenRouter
+    Agents -.-> OTel
+    Shared -.-> OTel
+    OTel --> Langfuse
+```
+
+- REST surface: `/run`, `/run_sse`. Agent discovery: `CompiledAgentLoader` scans `adk.agents.source-dir` for `ROOT_AGENT`.
+- H2 file DB at `./data/support-assistant`. Qdrant and Langfuse run in Docker (`:6334` gRPC, `:3000` UI).
+- Chat LLMs are switchable via `llm.provider`. Dense embeddings are local Ollama `nomic-embed-text` (not routed through `BaseLlm`).
+
+---
+
+## 2. Process Architecture
+
+### 2.1 Boot sequence
+
+1. `main()` → `SpringApplication.run` starts our context.
+2. Our `@Configuration` classes build: JPA/H2, `QdrantClient` (gRPC, `:6334`), the `OpenTelemetrySdk` (OTLP/HTTP exporter → Langfuse), and `ModelFactory`.
+3. An `ApplicationRunner` (`AppServicesInitializer`) publishes references to all of the above into a static `AppServices` holder, and seeds H2 + embeds policy documents into Qdrant if not already present.
+4. `AdkWebServer`'s own auto-configuration registers its beans (`sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter` — all `InMemory*` by default) [[2]](#references).
+5. `CompiledAgentLoader` (`@Service("agentLoader")`, active by default via `@ConditionalOnProperty(matchIfMissing=true)`) scans `--adk.agents.source-dir=target/classes` for classes exposing `public static final BaseAgent ROOT_AGENT`, and registers one entry per `demo-*` agent in the Web UI dropdown [[3]](#references).
+
+Step 3 must complete before step 5 can serve a request: agent classes are loaded reflectively by class-path scanning, not instantiated by Spring, so they are never `@Autowired` — they reach JPA repositories, the `QdrantClient`, and the OTel `Tracer` exclusively through the static `AppServices` holder.
+
+### 2.2 Bean-name collision — resolved
+
+`AdkWebServer` declares `@Bean public BaseSessionService sessionService()`, `@Bean public BaseArtifactService artifactService()`, and `@Bean public BaseMemoryService memoryService()`, all returning `InMemory*` implementations [[2]](#references). Spring Boot rejects a second bean definition with the same name by default, so `com.poc.adk` **must not** declare beans named `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` (already stated as a boundary in `spec.md`).
+
+**Consequence for memory architecture:** our H2-backed long-term/episodic memory and Qdrant-backed semantic memory are **not** wired through ADK's `BaseMemoryService` SPI — that stays the default `InMemoryMemoryService`, unused by our agents. Instead, `memory-services` is a package of plain Java services invoked as **function tools** (`CustomerPreferenceTool`, `TicketHistoryTool`), reached via `AppServices`, exactly as the Capability Map already models them (tools, not a memory-service override). Short-term memory therefore also runs on ADK's default `InMemorySessionService` — acceptable per `spec.md` (single-instance POC; short-term memory is not required to survive a restart).
+
+### 2.3 HITL `FunctionResponse` shape — resolved
+
+Per ADK's confirmation contract [[4]](#references), resuming a paused tool call requires a `FunctionResponse` matching this shape exactly:
+
+```json
+{
+  "id": "<function_call_id of the adk_request_confirmation FunctionCall>",
+  "name": "adk_request_confirmation",
+  "response": {
+    "confirmed": true,
+    "payload": {}
+  }
+}
+```
+
+`id` must equal the `function_call_id` on the `adk_request_confirmation` event ADK emitted — not the ID of the original tool call being confirmed. The Web UI's approval dialog sends this shape over `/run_sse`; Layer-3 JUnit tests construct it directly against `InMemoryRunner`. See [D5](#65-human-in-the-loop--d5) for the runtime path.
+
+### 2.4 Embedding dimension — resolved
+
+`nomic-embed-text` (Ollama) is documented at **768 dimensions** [[5]](#references). Both Qdrant collections below use `size=768, distance=Cosine`. `EmbeddingClient` asserts `vector.length == 768` on its first call at startup and fails fast on mismatch, replacing the ad hoc `curl` check.
+
+---
+
+## 3. Package Structure
+
+Extends `spec.md`'s indicative layout with concrete class names; each class maps to a Capability Map module.
+
+```
+src/main/java/com/poc/adk/
+  SupportAssistantApplication.java
+  bootstrap/
+    AppServices.java              // static holder: repositories, QdrantClient, Tracer, ModelFactory
+    AppServicesInitializer.java   // ApplicationRunner — populates AppServices, seeds H2 + Qdrant
+  config/
+    ModelRoutingProperties.java   // @ConfigurationProperties("llm")
+    ObservabilityConfig.java      // OpenTelemetrySdk + OTLP exporter bean
+    QdrantConfig.java             // QdrantClient bean + collection bootstrap (idempotent)
+  domain/
+    Customer.java, Order.java, Payment.java, Shipment.java, Ticket.java,
+    CustomerPreference.java, FraudSignal.java, GuardrailAuditLog.java, EvaluationRun.java
+    repository/                  // Spring Data JPA repositories, one per entity
+  tools/
+    OrderLookupTool.java, PaymentHistoryTool.java, ShipmentTrackingTool.java, FraudSignalTool.java
+    RefundTool.java               // HITL threshold check inside the method body — see 2.3 / D5
+  memory/
+    CustomerPreferenceTool.java   // long-term
+    TicketHistoryTool.java        // episodic
+  guardrails/
+    InputGuardrailCallback.java   // BeforeModelCallback
+    OutputGuardrailCallback.java  // AfterModelCallback
+    PiiMasker.java, PromptInjectionHeuristics.java, GuardrailAuditService.java
+  rag/
+    ChunkingService.java          // ## / ### header split, ~400-token cap, ~200-char overlap
+    EmbeddingClient.java          // Ollama /api/embeddings HTTP, asserts 768-dim
+    HybridRetriever.java          // dense prefetch + BM25 prefetch + RRF in one queryAsync
+    CitationFormatter.java
+  agents/
+    singleagent/, sequential/, parallel/, routing/, hitl/, loop/, rag/, personalization/
+      // one class per demo-*, each exposing `public static final BaseAgent ROOT_AGENT`
+src/main/resources/
+  policies/{refund,shipping,fraud,loyalty}-policy.md
+  prompts/{agent}.v1.md
+src/test/resources/eval/*.eval.json
+docker/docker-compose.yml        // Qdrant (>= 1.15.2) + Langfuse
+data/                             // H2 file-mode DB, gitignored
+```
+
+No client-side BM25 tokenizer. Qdrant generates sparse BM25 vectors from raw text (`model = "qdrant/bm25"`) [[15]](#references).
+
+---
+
+## 4. Data Architecture
+
+### 4.1 H2 schema
+
+Field-level schema was explicitly left to Architecture in `spec.md`. Enum values are taken from the canonical seed data in `playbook.md`.
+
+| Column / table | Allowed values |
+|---|---|
+| `CUSTOMER.loyalty_tier` | `SILVER`, `GOLD` |
+| `ORDER.status` | `PLACED`, `DELAYED`, `DELIVERED`, `REFUND_REQUESTED`, … |
+| `PAYMENT.status` | `CAPTURED`, `REFUNDED`, `PENDING` |
+| `SHIPMENT.status` | `IN_TRANSIT`, `IN_TRANSIT_DELAYED`, `DELIVERED` |
+| `TICKET.category` | `shipping_delay`, `refund`, `fraud`, `account` |
+| `TICKET.status` | `OPEN`, `RESOLVED` |
+| `CUSTOMER_PREFERENCE.preferred_contact_channel` | `EMAIL`, `SMS`, `PHONE` |
+| `GUARDRAIL_AUDIT_LOG.direction` | `INPUT`, `OUTPUT` |
+| `GUARDRAIL_AUDIT_LOG.action` | `BLOCKED`, `MASKED`, `ALLOWED` |
+
+`GUARDRAIL_AUDIT_LOG` and `EVALUATION_RUN` are standalone logs (no FK).
+
+```mermaid
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    CUSTOMER ||--o| CUSTOMER_PREFERENCE : has
+    CUSTOMER ||--o{ TICKET : files
+    ORDER ||--o| PAYMENT : has
+    ORDER ||--o| SHIPMENT : has
+    ORDER ||--o{ TICKET : concerns
+    ORDER ||--o{ FRAUD_SIGNAL : flags
+
+    CUSTOMER {
+        string id PK
+        string name
+        string email
+        string loyalty_tier
+    }
+    ORDER {
+        string id PK
+        string customer_id FK
+        string product_name
+        decimal amount
+        string status
+        datetime created_at
+    }
+    PAYMENT {
+        string id PK
+        string order_id FK
+        string method
+        string status
+        decimal amount
+    }
+    SHIPMENT {
+        string id PK
+        string order_id FK
+        string carrier
+        string status
+        int days_delayed
+    }
+    TICKET {
+        string id PK
+        string customer_id FK
+        string order_id FK
+        string category
+        string status
+        string resolution_summary
+        datetime created_at
+    }
+    CUSTOMER_PREFERENCE {
+        string customer_id PK
+        string preferred_contact_channel
+    }
+    FRAUD_SIGNAL {
+        string id PK
+        string order_id FK
+        string signal_type
+        decimal score
+    }
+    GUARDRAIL_AUDIT_LOG {
+        string id PK
+        string session_id
+        string direction
+        string rule_triggered
+        string action
+        datetime created_at
+    }
+    EVALUATION_RUN {
+        string id PK
+        string layer
+        string test_name
+        string status
+        datetime run_at
+    }
+```
+
+### 4.2 Qdrant collections
+
+One collection. Semantic memory in this POC **is** that collection — the four policy files are the facts / business rules (Playbook §7). There is no second Qdrant corpus and no `semantic_memory` collection. Playbook §8 (preferences / past tickets) is H2 by `customer_id`, not vector similarity.
+
+| Collection | Vectors | Payload | Purpose |
+|---|---|---|---|
+| `policy_chunks` | `dense`: 768-dim Cosine (`nomic-embed-text`). `lexical`: sparse BM25 (`qdrant/bm25` + IDF modifier) | `doc_id`, `source_path`, `section_heading`, `chunk_index`, `chunk_text` | RAG + citations ([D7](#67-rag-policy-qa--d7)); semantic-memory demo ([D8](#68-memory-architecture--d8)) |
+
+### 4.3 Hybrid search — BM25 + semantic
+
+Hybrid means **two ranked lists, then fusion** — not "the agent read two documents," and not two semantic models.
+
+| Retriever | Qdrant vector | What it ranks | Playbook job |
+|---|---|---|---|
+| **Semantic** | named `dense` (768-d cosine) | paraphrases / meaning | "how long can I send this back" |
+| **BM25** | named `lexical` (sparse) | exact tokens / codes | `NW-SHIP-EXC-04`, `NW-HP-1001` |
+
+"Sparse" is the storage form of BM25 (one dimension per vocabulary term, most zeros). It is **not** SPLADE or a second embedding model.
+
+**Why not a payload full-text index?** That index is a **filter**. Filters do not produce a relevance score or a ranked list, so they cannot feed RRF: "a filter does not contribute to the ranking of search results, as no score is calculated for filters" [[6]](#references). `spec.md` pre-authorized upgrading the lexical side to a named sparse BM25 vector; that upgrade is required, not optional.
+
+**How BM25 vectors are produced:** pin Qdrant **≥ 1.15.2** and send raw chunk/query text with `model = "qdrant/bm25"`. Qdrant tokenizes, builds the sparse vector, and applies collection-level IDF (`modifier: idf`). No Java tokenizer [[15]](#references).
+
+**How RRF works:** each retriever returns an ordered list. Fusion uses **rank**, not raw cosine vs BM25 (those scales do not mix):
+
+`score(chunk) = 1/(k + rank_dense) + 1/(k + rank_bm25)` with `k = 60`.
+
+A chunk that is weak on meaning but #1 on the exception code still rises. That is the Playbook §7.3 trap: dense-only prefers shipping-policy weather prose; hybrid prefers the loyalty courtesy clause.
+
+Both prefetches and RRF run in **one** `queryAsync` [[7]](#references):
+
+```java
+client.queryAsync(QueryPoints.newBuilder()
+    .setCollectionName("policy_chunks")
+    .addPrefetch(PrefetchQuery.newBuilder()
+        .setQuery(nearest(denseEmbedding)).setUsing("dense").setLimit(20))
+    .addPrefetch(PrefetchQuery.newBuilder()
+        .setQuery(nearest(Document.newBuilder()
+            .setText(query).setModel("qdrant/bm25").build()))
+        .setUsing("lexical").setLimit(20))
+    .setQuery(rrf(Rrf.newBuilder().setK(60).build()))
+    .setLimit(10)
+    .build());
+```
+
+---
+
+## 5. Model Routing — D11
+
+`OpenAiCompatibleLlm`, `Gemini`, and `Claude` all extend `com.google.adk.models.BaseLlm` [[8]](#references). `ModelFactory.create(ModelRoutingProperties)` switches on `llm.provider` and returns a `BaseLlm`, so no agent code changes when the provider changes.
+
+```mermaid
+flowchart TD
+    Cfg[llm.provider] --> MF[ModelFactory]
+    MF -->|ollama| OA[OpenAI-compat local]
+    MF -->|openrouter| OR[OpenAI-compat cloud]
+    MF -->|gemini| GE[Gemini]
+    MF -->|anthropic| CL[Claude]
+    OA --> Agent[LlmAgent]
+    OR --> Agent
+    GE --> Agent
+    CL --> Agent
+```
+
+- Ollama: `OpenAiCompatibleLlm` at `http://localhost:11434/v1/`, model `qwen2.5:7b`.
+- OpenRouter: same class, `openrouter.ai/api/v1/`, `Authorization` header.
+- Gemini: `Gemini.builder().modelName(...)`. Anthropic: `new Claude(modelName, AnthropicOkHttpClient...)`. Exact builder methods are confirmed against `google-adk` **1.9.0** Javadoc when `ModelFactory` is written (`spec.md` → Boundaries → Always) — not an architecture unknown.
+
+---
+
+## 6. Per-Agent Runtime Paths
+
+Guardrails (D9) and OTel (D10) wrap every path below; they are omitted from these diagrams so the agent graph stays readable.
+
+### 6.1 Single Agent + Tool Call — D1
+
+Playbook §1. Short-term memory is `session.state` on ADK's default `InMemorySessionService` ([§2.2](#22-bean-name-collision--resolved)): turn 2 ("Who is it for?") should not repeat `order_lookup`.
+
+```mermaid
+flowchart TD
+    Q[User query] --> BMC[beforeModelCallback]
+    BMC --> M1[Chat model]
+    M1 --> Need{Tool call?}
+    Need -->|yes| T[order_lookup]
+    T --> H2[(H2)]
+    H2 --> M2[Chat model]
+    M2 --> AMC[afterModelCallback]
+    Need -->|no| AMC
+    AMC --> Out[SSE to UI]
+```
+
+### 6.2 Sequential Workflow — D2
+
+`SequentialAgent` never transfers control back to a parent `LlmAgent` [[9]](#references), so it is the registered `ROOT_AGENT`. Sub-agents chain via `outputKey` → `{key}` placeholders. Missing order `ORD-9999`: `order_lookup` returns empty; gather still completes; draft reports not found.
+
+```mermaid
+flowchart TD
+    Q[Investigate order] --> Seq[SequentialAgent]
+    Seq --> G[gather]
+    G --> P[policy_check]
+    P --> D[draft]
+    D --> Out[Resolution text]
+```
+
+- `gather` writes `investigation_facts` (order / payment / shipment tools).
+- `policy_check` reads that key, runs RAG, writes `policy_findings`.
+- `draft` reads both keys.
+
+### 6.3 Parallel Workflow — D3
+
+`ParallelAgent` also never transfers back to a parent `LlmAgent` [[9]](#references). Fan-out and aggregator are siblings inside a `SequentialAgent` root. Langfuse spans for the three checks must overlap in time.
+
+```mermaid
+flowchart TD
+    Q[Risk assessment] --> Root[SequentialAgent]
+    Root --> Par[ParallelAgent]
+    Par --> Pay[payment_check]
+    Par --> Ship[shipment_check]
+    Par --> Fraud[fraud_check]
+    Pay --> Agg[aggregator]
+    Ship --> Agg
+    Fraud --> Agg
+    Agg --> Out[Cited risk report]
+```
+
+`outputKey`s: `payment_status`, `shipment_status`, `fraud_signal`. Seeded fraud on `ORD-5002`: `MULTIPLE_SHIPPING_ADDRESSES`, score `0.82`.
+
+### 6.4 Dynamic Routing — D4
+
+The coordinator's model emits `transfer_to_agent(agent_name=...)`; ADK's `AutoFlow` intercepts it and resolves the target via `root_agent.findAgent(...)` [[10]](#references) — no explicit `AgentTool` wrapping.
+
+```mermaid
+flowchart TD
+    Q[User query] --> C[Coordinator]
+    C --> M[Chat model]
+    M --> T[transfer_to_agent]
+    T --> S{Specialist}
+    S -->|refund| Bill[billing]
+    S -->|late package| Ship[shipping]
+    S -->|preference| Acct[account]
+    Bill --> Out[Specialist reply]
+    Ship --> Out
+    Acct --> Out
+```
+
+### 6.5 Human-in-the-Loop — D5
+
+Threshold logic lives inside the tool body (data-dependent $200), not a static `FunctionTool.create(..., true)` flag — ADK's documented dynamic-threshold pattern [[11]](#references). Wire format: [§2.3](#23-hitl-functionresponse-shape--resolved). Reject (`confirmed: false`) must not write H2.
+
+```mermaid
+flowchart TD
+    Q[Refund ORD-5010] --> T[process_refund]
+    T --> Cap{amount over 200?}
+    Cap -->|no| Exec[Write refund to H2]
+    Cap -->|yes| Have{Confirmation present?}
+    Have -->|no| Pause[requestConfirmation]
+    Pause --> UI[Approval dialog]
+    UI -->|approve| Exec
+    UI -->|reject| Skip[No H2 write]
+    Exec --> Ok[REFUNDED]
+    Skip --> No[Not approved]
+```
+
+### 6.6 Loop Agent Refinement — D6
+
+`LoopAgent` never transfers back to a parent `LlmAgent` [[9]](#references). A publisher sibling inside a `SequentialAgent` root reads the loop's final `{draft}`. The critic exits by setting `EventActions.escalate = true` (or the built-in `exit_loop` tool) [[12]](#references). `maxIterations = 3` is the hard cap; publisher still emits a best-effort draft if the cap is hit.
+
+```mermaid
+flowchart TD
+    Q[Draft apology] --> Root[SequentialAgent]
+    Root --> Loop[LoopAgent]
+    Loop --> Draft[drafter]
+    Draft --> Crit[critic]
+    Crit --> Ok{Compliant?}
+    Ok -->|yes| Exit[escalate / exit_loop]
+    Ok -->|no| Loop
+    Exit --> Pub[publisher]
+    Pub --> Out[Final draft only]
+```
+
+### 6.7 RAG Policy Q&A — D7
+
+Dense-only would rank shipping-policy weather #1 (semantic distractor). BM25 hits the exact codes in `loyalty-policy.md`; RRF promotes that chunk. Citations come from payload (`source_path` + `section_heading`), not from the model guessing.
+
+```mermaid
+flowchart TD
+    Q[Policy question] --> A[demo-rag-policy]
+    A --> R[HybridRetriever]
+    R --> D[Dense search]
+    R --> B[BM25 search]
+    D --> F[RRF]
+    B --> F
+    F --> C[Top-K + citations]
+    C --> M[Chat model]
+    M --> Out[Grounded answer]
+```
+
+### 6.8 Memory Architecture — D8
+
+Long-term and episodic lookups are relational queries by `customer_id` / `order_id` — no embedding similarity is required for them in `spec.md` / `playbook.md`.
+
+```mermaid
+flowchart LR
+    Agent[Agent / tools]
+    Agent --> ST[Short-term]
+    Agent --> LT[Long-term]
+    Agent --> EP[Episodic]
+    Agent --> SE[Semantic]
+```
+
+| Type | Store | Contents | Access |
+|---|---|---|---|
+| Short-term | ADK `InMemorySessionService` | Conversation turns | `session.state` |
+| Long-term | H2 `CustomerPreference` | `preferred_contact_channel` | `CustomerPreferenceTool` |
+| Episodic | H2 `Ticket` | Past tickets | `TicketHistoryTool` |
+| Semantic | Qdrant `policy_chunks` | Policy text (the business rules) | `HybridRetriever` |
+
+---
+
+## 7. Cross-Cutting Pipelines
+
+### 7.1 Guardrails — D9
+
+Implemented as ADK `LlmAgent` callbacks [[13]](#references): `beforeModelCallback` returning a non-empty `LlmResponse` **skips** the model call (input short-circuit); `afterModelCallback` can **replace** the `LlmResponse` (output masking). Applied uniformly via a shared builder helper — no agent is exempt.
+
+```mermaid
+flowchart TD
+    In[User message] --> BMC[beforeModelCallback]
+    BMC -->|injection or PII| Block[Skip model]
+    BMC -->|clean| Model[Chat model]
+    Block --> A1[Audit BLOCKED]
+    Model --> AMC[afterModelCallback]
+    AMC -->|card digits etc| Mask[Mask and replace]
+    AMC -->|clean| Pass[Unchanged]
+    Mask --> A2[Audit MASKED]
+    A1 --> Out[Reply]
+    A2 --> Out
+    Pass --> Out
+```
+
+Tool callbacks (`beforeToolCallback` / `afterToolCallback`) wrap tool execution the same way; they are logging/audit hooks in this POC, not a second safety model. Hallucination mitigation is RAG grounding + Playbook §7.4, not an LLM-as-judge.
+
+### 7.2 Observability — D10
+
+Langfuse's OTLP endpoint requires HTTP (protobuf or JSON) — gRPC is not supported — and self-hosted Langfuse must be ≥ v3.22.0 [[14]](#references). `docker/docker-compose.yml` pins a compatible image.
+
+```mermaid
+flowchart LR
+    Agent[Agent spans] --> SDK[OTel SDK]
+    Tool[Tool spans] --> SDK
+    Model[Model spans] --> SDK
+    SDK --> LF[Langfuse OTLP]
+    LF --> UI[Trace UI]
+```
+
+Export: OTLP/HTTP protobuf to `/api/public/otel`, Basic Auth, header `x-langfuse-ingestion-version: 4`. Trace UI shows token usage, latency, cost, errors.
+
+### 7.3 Evaluation Harness — D12
+
+```mermaid
+flowchart TD
+    L0[L0 Tool eval] --> L1[L1 Retrieval eval]
+    L1 --> L2[L2 Prompt eval]
+    L2 --> L3[L3 Agent eval]
+    L3 --> L4[L4 Playbook]
+    L0 -.-> F0[Fix tools]
+    L1 -.-> F1[Fix retriever]
+    L2 -.-> F2[Fix prompt]
+    L3 -.-> F3[Fix agent graph]
+```
+
+L0–L1: no LLM. L2–L3: LLM, temperature 0. L4: manual Web UI. Localize the failing layer before editing a prompt.
+
+---
+
+## 8. Key Architecture Decisions
+
+| # | Decision | Rationale |
+|---|---|---|
+| 1 | Hybrid = **BM25 sparse + nomic dense**, fused with RRF. Lexical side is a named sparse vector, not a payload full-text filter | Filters have no rank, so they cannot feed RRF [[6]](#references). Sparse is BM25 storage, not a second semantic model. See [§4.3](#43-hybrid-search--bm25--semantic) |
+| 2 | Qdrant **≥ 1.15.2** generates BM25 from raw text (`qdrant/bm25`). No Java `SparseVectorizer` | Official Java `Document` inference [[15]](#references); fewer moving parts than a client tokenizer |
+| 3 | Stay on **local** Qdrant. Do not use Vertex AI Vector Search (or other cloud vector DBs) | Same hybrid algorithm, extra GCP index/endpoint/IAM/always-on replicas. Does not simplify the Playbook retrieval test |
+| 4 | Embeddings, guardrails, and observability stay local (Ollama `nomic-embed-text`, ADK callbacks, OTel → Langfuse). App is not deployed to GCP/AWS | Cloud services here add credentials and network without teaching more ADK. Langfuse is a named POC topic |
+| 5 | `ParallelAgent` / `LoopAgent` / `SequentialAgent` are each wrapped in (or are) a `SequentialAgent` root, with follow-up `LlmAgent`s as siblings reading `outputKey` | These workflow agents never hand control back to a parent `LlmAgent` [[9]](#references) |
+| 6 | Long-term and episodic memory are tools over H2, not `BaseMemoryService`. Semantic memory is RAG over `policy_chunks` | `AdkWebServer` hard-codes `InMemoryMemoryService`; overriding the bean name collides — see [§2.2](#22-bean-name-collision--resolved) |
+| 7 | Agent classes reach Spring-managed infra via a static `AppServices` holder | `CompiledAgentLoader` finds a static field; `@Autowired` is unavailable |
+| 8 | Dynamic routing uses `subAgents()` + implicit `transfer_to_agent`, not explicit `AgentTool` wrapping | Coordinator/Specialist with the least code [[10]](#references) |
+| 9 | HITL threshold check lives inside the tool method body, not a static `requireConfirmation` flag | $200 threshold is data-dependent [[11]](#references) |
+| 10 | Semantic memory = `policy_chunks` only. No second Qdrant collection | Spec/playbook never define a separate fact corpus. Policy files already are the business rules; §8 memory is H2 |
+
+---
+
+## 9. Non-Goals / Carried Forward to Plan
+
+Exact Qdrant image tag (≥ 1.15.2), Maven dependency versions, and prompt file contents are Plan-phase, not Architecture. No open product or schema questions remain.
+
+---
+
+## References
+
+1. Spring Boot `spring-projects/spring-boot#39943` — scanning `AdkWebServer`'s package instead of calling `AdkWebServer.start()`.
+2. `AdkWebServer` API reference (`adk.dev/api-reference/java/com/google/adk/web/AdkWebServer.html`) — `sessionService()`, `artifactService()`, `memoryService()` bean methods; `google/adk-java#588`.
+3. `CompiledAgentLoader` API reference (`adk.dev/api-reference/java/com/google/adk/web/CompiledAgentLoader.html`).
+4. `adk.dev/tools-custom/confirmation/` — Action confirmations, `FunctionResponse` shape for `adk_request_confirmation`.
+5. Ollama `nomic-embed-text` model card / Nomic documentation (`docs.nomic.ai/atlas/embeddings-and-retrieval/text-embedding`) — 768 dimensions.
+6. Qdrant `documentation/search/text-search/` and `text-search/full-text-search/` — filters vs. queries, BM25 via sparse vectors.
+7. Qdrant `documentation/search/hybrid-queries/` and `QueryFactory` API (`qdrant.github.io/java-client`) — `PrefetchQuery` + `rrf(Rrf)`.
+8. `adk.dev/api-reference/java/com/google/adk/models/` — `BaseLlm`, `OpenAiCompatibleLlm` (`google/adk-java#1202`), `Claude`.
+9. `SequentialAgent`, `ParallelAgent`, `LoopAgent` API references (`adk.dev/api-reference/java/com/google/adk/agents/`) — composition rules, `outputKey`/`{key}` chaining.
+10. `google/adk-docs` — `docs/agents/multi-agents.md` — `transfer_to_agent`, `AutoFlow`, `find_agent`.
+11. `google/adk-docs` — `docs/tools-custom/confirmation.md` — dynamic threshold confirmation pattern.
+12. `adk.dev/tools-custom/` — `ToolContext.actions()`, `escalate` terminating a `LoopAgent`.
+13. `LlmAgent.Builder` API reference and `google/adk-docs` — `docs/callbacks/` — before/after model and tool callback semantics.
+14. Langfuse — `langfuse.com/integrations/native/opentelemetry` — OTLP endpoint, self-hosted version requirement, auth headers.
+15. Qdrant BM25 inference — `qdrant.tech/documentation/inference/inference-bm25/` and `documentation/search/text-search/full-text-search/` (Java `Document` + `qdrant/bm25`, native conversion since 1.15.2).
