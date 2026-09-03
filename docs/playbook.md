@@ -4,11 +4,13 @@ Status: **APPROVED**
 
 ## Purpose
 
-This is the manual test script for every feature built in this project. For each scenario below: pick the named agent in the ADK Web UI dropdown, type the exact query, and check the response against the stated expectations.
+This is the manual test script for every feature built in this project.
 
-**Traceability is inline** (POC topic → this section → Architecture diagram). Each scenario lists the **POC topics** it proves (from `Google ADK Java POC.md`) and the **Architecture** diagram IDs (produced in `architecture.md`; IDs fixed here so both docs stay in sync). Start with **D0** for the whole-system view; the per-scenario IDs show *why* that query’s runtime behaves that way. There is no separate mapping table.
+**How to run a scenario:** pick the named agent in the ADK Web UI dropdown, type the exact query, and check the response against the stated expectations.
 
-**Architecture diagrams this Playbook will reference** (built next, names fixed now so cross-references don't drift):
+**Traceability:** each scenario lists the **POC topics** it proves (from `Google ADK Java POC.md`) and the **Architecture** diagram IDs (from `architecture.md`). Start with **D0** for the whole-system view; per-scenario IDs show *why* that query's runtime behaves that way.
+
+**Architecture diagrams** (built next; IDs fixed here so cross-references don't drift):
 
 
 | ID  | Diagram                                                           |
@@ -28,15 +30,51 @@ This is the manual test script for every feature built in this project. For each
 | D12 | Evaluation harness flow                                           |
 
 
-## Global Setup (do once)
 
-1. `ollama pull qwen2.5:7b` and `ollama serve` running on `http://localhost:11434`.
-2. `docker compose -f docker/docker-compose.yml up -d` — starts Qdrant + Langfuse (+ their dependencies).
-3. `mvn compile exec:java -Dexec.mainClass="com.northwind.support.SupportAssistantApplication" -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"` — our class is the `@SpringBootApplication` (scanning `com.northwind.support` and `com.google.adk.web`), so it boots the Dev UI directly; no `AdkWebServer.start(...)` call.
-4. Open `http://localhost:8000`. Confirm the agent dropdown lists every `demo-*` agent from the Capability Map.
-5. Confirm H2 seeded data loaded (app logs show seed count) and policy text files were embedded into Qdrant (app logs show collection populated).
 
-### Canonical seed data (used by every scenario below, so results are reproducible)
+## Global Setup
+
+
+
+### Prerequisites
+
+**Ollama** — pull the model and start the server:
+
+```bash
+ollama pull qwen2.5:7b
+ollama serve
+```
+
+Server should be available at `http://localhost:11434`.
+
+**Docker** — start Qdrant and Langfuse:
+
+```bash
+docker compose -f docker/docker-compose.yml up -d
+```
+
+
+
+### Start the application
+
+```bash
+mvn compile exec:java \
+  -Dexec.mainClass="com.northwind.support.SupportAssistantApplication" \
+  -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"
+```
+
+`SupportAssistantApplication` is the `@SpringBootApplication` (scanning `com.northwind.support` and `com.google.adk.web`), so it boots the Dev UI directly — no `AdkWebServer.start(...)` call.
+
+### Verify
+
+1. Open `http://localhost:8000` and confirm the agent dropdown lists every `demo-*` agent from the Capability Map.
+2. Check app logs: H2 seed data loaded (seed count) and policy documents embedded into Qdrant (collection populated).
+
+
+
+### Canonical seed data
+
+Used by every scenario below so results are reproducible.
 
 
 | Entity             | Id                                                                               | Key facts                                                                                                                                                         |
@@ -51,6 +89,8 @@ This is the manual test script for every feature built in this project. For each
 | Order              | `ORD-5002` (Alex Kim)                                                            | Flagged by fraud signal `MULTIPLE_SHIPPING_ADDRESSES`, score 0.82.                                                                                                |
 | Policy docs        | `refund-policy.md`, `shipping-policy.md`, `fraud-policy.md`, `loyalty-policy.md` | Markdown with `##` sections, chunked and embedded into Qdrant.                                                                                                    |
 | Hybrid trap clause | `NW-SHIP-EXC-04` / SKU `NW-HP-1001`                                              | **Only** in `loyalty-policy.md` (GOLD courtesy codes). `shipping-policy.md` discusses weather delays in prose **without** those tokens — dense-search distractor. |
+
+
 
 
 ## Model reliability, evaluation & prompt engineering
@@ -100,6 +140,8 @@ All prompts live in `src/main/resources/prompts/{agent}.v1.md`. Techniques to ap
 6. **Version prompts** — change prompt ⇒ update matching `.eval.json` ⇒ re-run Layer 2 before Layer 3.
 7. **Negative instructions sparingly** — prefer "use only tool JSON fields X, Y" over long "do not hallucinate" lists.
 
+
+
 ### When to switch to Gemini or Anthropic (cloud model fallbacks)
 
 Use `llm.provider` switch in `application.yml` — no code change. Cloud models are for **demo polish and teaching comparison**, not daily CI (Layers 0–1 never need them; Layer 3 should pass on qwen or `TestLlm`).
@@ -120,9 +162,15 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 **Suggested demo flow:** build and debug on qwen → run Layers 0–3 → for a stakeholder demo, rerun **§4**, **§7.2–7.3**, and **§6** once on `gemini-2.0-flash` or `claude-3-7-sonnet` to show the same graph with better prose.
 
+---
+
+
+
 ## 1. Single Agent + Tool Calling — `demo-single-agent`
 
-**POC topics**: Single Agent, Java Functions, Custom Tools, Prompt management, Short-Term Memory (conversation / session state / context window). **Architecture**: D1, D8 (short-term portion), D9, D10.
+**POC topics:** Single Agent, Java Functions, Custom Tools, Prompt management, Short-Term Memory (conversation / session state / context window).
+
+**Architecture:** D1, D8 (short-term portion), D9, D10.
 
 
 | Step | Query                                    | Expected                                                                                                                                                                                          |
@@ -131,11 +179,17 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 | 2    | *(same session)* "Who is it for?"        | Correctly resolves "it" to `ORD-5001` using conversation/session state — this is the short-term memory check. If the agent re-asks which order, that's a short-term memory failure.               |
 
 
-**Langfuse check**: one trace per turn, containing a model-call span and a tool-call span for step 1; step 2's trace should show no tool call (answered from context) or a customer-lookup tool call, not an order-lookup repeat.
+
+
+### Langfuse check
+
+One trace per turn, containing a model-call span and a tool-call span for step 1; step 2's trace should show no tool call (answered from context) or a customer-lookup tool call, not an order-lookup repeat.
 
 ## 2. Sequential Workflow — `demo-sequential-investigation`
 
-**POC topics**: Sequential workflow, Multi-Agent, Agent composition, Database Tool, Retry & error recovery (non-HITL / not-found). **Architecture**: D2, D9, D10.
+**POC topics:** Sequential workflow, Multi-Agent, Agent composition, Database Tool, Retry & error recovery (non-HITL / not-found).
+
+**Architecture:** D2, D9, D10.
 
 
 | Step | Query                                                       | Expected                                                                                                                                                                                                                                                                                                                     |
@@ -144,9 +198,13 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 | 2    | *"Investigate order ORD-9999."* (non-existent)              | Tool returns a "not found" result; the agent reports the order doesn't exist rather than crashing or hallucinating an investigation. This is the retry/error-recovery check — confirm in Langfuse the tool span shows an error/empty result and the pipeline still completes with a graceful final response.                 |
 
 
+
+
 ## 3. Parallel Workflow — `demo-parallel-investigation`
 
-**POC topics**: Parallel workflow, Multi-Agent (fan-out/fan-in). **Architecture**: D3, D9, D10.
+**POC topics:** Parallel workflow, Multi-Agent (fan-out/fan-in).
+
+**Architecture:** D3, D9, D10.
 
 
 | Step | Query                                                 | Expected                                                                                                                                                                                                                                                                                               |
@@ -154,11 +212,17 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 | 1    | *"Give me a full risk assessment on order ORD-5002."* | Payment check, shipment check, and fraud-signal check run concurrently (Langfuse spans for the three sub-agents should overlap in time, not be strictly sequential), then an aggregator response cites the fraud signal (`MULTIPLE_SHIPPING_ADDRESSES`, score 0.82) alongside payment/shipment status. |
 
 
-**What would indicate a bug**: sub-agent spans in Langfuse with no time overlap (means it silently ran sequentially) — check against D3.
+
+
+### What would indicate a bug
+
+Sub-agent spans in Langfuse with no time overlap (means it silently ran sequentially) — check against D3.
 
 ## 4. Dynamic Routing / Coordinator–Specialist — `demo-dynamic-routing`
 
-**POC topics**: Dynamic routing, Coordinator Agent, Specialist Agents, Agent delegation, Conditional branching, Nested workflows, Multi-Agent. **Architecture**: D4, D9, D10.
+**POC topics:** Dynamic routing, Coordinator Agent, Specialist Agents, Agent delegation, Conditional branching, Nested workflows, Multi-Agent.
+
+**Architecture:** D4, D9, D10.
 
 
 | Step | Query                                    | Expected                                                                                                                                                       |
@@ -168,11 +232,17 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 | 3    | *"Update my contact preference to SMS."* | Routes to the **account specialist**.                                                                                                                          |
 
 
-**Verify via Langfuse**: each trace's top span should show the coordinator's routing decision (which sub-agent it transferred to) before the specialist's own spans — this is the "nested workflow" shape in D4.
+
+
+### Verify via Langfuse
+
+Each trace's top span should show the coordinator's routing decision (which sub-agent it transferred to) before the specialist's own spans — this is the "nested workflow" shape in D4.
 
 ## 5. Human-in-the-Loop — `demo-hitl-approval`
 
-**POC topics**: Human-in-the-loop, Retry & error recovery (approve / reject paths). **Architecture**: D5, D9, D10.
+**POC topics:** Human-in-the-loop, Retry & error recovery (approve / reject paths).
+
+**Architecture:** D5, D9, D10.
 
 > **Live demo:** When the refund exceeds the threshold, the ADK Web UI shows an **approval dialog** — click Approve or Reject ([ToolConfirmation docs](https://adk.dev/tools-custom/confirmation/)). No Postman. Automated tests use `InMemoryRunner` and inject the confirmation `FunctionResponse` in code.
 
@@ -184,11 +254,17 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 | 3    | Repeat step 1, click **Reject**              | Agent informs customer refund was not approved; H2 shows no refund side effect.                                         |
 
 
-**JUnit (Layer 3):** same queries via `InMemoryRunner`; assert confirmation event fires, then programmatic `confirmed: true/false`; reject path must never call the refund tool.
+
+
+### JUnit (Layer 3)
+
+Same queries via `InMemoryRunner`; assert confirmation event fires, then programmatic `confirmed: true/false`; reject path must never call the refund tool.
 
 ## 6. Loop Agent Refinement — `demo-loop-refinement`
 
-**POC topics**: Loop workflow (spec-implied `LoopAgent`; not a named heading in `Google ADK Java POC.md`), iterative self-correction. **Architecture**: D6, D9, D10.
+**POC topics:** Loop workflow (spec-implied `LoopAgent`; not a named heading in `Google ADK Java POC.md`), iterative self-correction.
+
+**Architecture:** D6, D9, D10.
 
 
 | Step | Query                                                                                                         | Expected                                                                                                                                                                                                                 |
@@ -197,11 +273,15 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 | 2    | *(engineered to force max iterations, e.g. an intentionally unsatisfiable instruction)*                       | Loop terminates at `max_iterations` rather than looping forever — confirm a hard cap exists in the trace (iteration count in Langfuse matches the configured max).                                                       |
 
 
+
+
 ## 7. RAG Policy Q&A — `demo-rag-policy`
 
-**POC topics**: RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation), Semantic Memory (facts / business rules / policy knowledge). **Architecture**: D7, D8 (semantic portion), D9, D10.
+**POC topics:** RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation), Semantic Memory (facts / business rules / policy knowledge).
 
-Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-token overlap on oversized sections, cite via `source_path` + `section_heading`.
+**Architecture:** D7, D8 (semantic portion), D9, D10.
+
+**Chunking contract** (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-token overlap on oversized sections, cite via `source_path` + `section_heading`.
 
 
 | Step | Query                                                                      | Expected                                                                                                                                                                                                                                                                                                                                                                        |
@@ -212,11 +292,17 @@ Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-
 | 4    | *"What's your policy on interstellar shipping?"* (not in any policy doc)   | Answer says this isn't covered by policy rather than fabricating one — hallucination-mitigation check on top of RAG.                                                                                                                                                                                                                                                            |
 
 
-**What would indicate a bug on step 3:** a fluent answer that cites shipping-policy weather text and never mentions `NW-SHIP-EXC-04`. That is dense-only retrieval winning; do not "fix" it by stuffing the codes into the prompt. Re-run `RetrievalEvalTest` (no LLM) first.
+
+
+### What would indicate a bug on step 3
+
+A fluent answer that cites shipping-policy weather text and never mentions `NW-SHIP-EXC-04`. That is dense-only retrieval winning; do not "fix" it by stuffing the codes into the prompt. Re-run `RetrievalEvalTest` (no LLM) first.
 
 ## 8. Memory Personalization — `demo-memory-personalization`
 
-**POC topics**: Long-Term Memory (preferences, cross-session recall), Episodic Memory (past interactions). Short-term is §1; semantic is §7; D8 is the memory comparison / data-flow diagram for all four types. **Architecture**: D8, D9, D10.
+**POC topics:** Long-Term Memory (preferences, cross-session recall), Episodic Memory (past interactions). Short-term is §1; semantic is §7; D8 is the memory comparison / data-flow diagram for all four types.
+
+**Architecture:** D8, D9, D10.
 
 
 | Step | Query                                                                                                                 | Expected                                                                                                                                                                                                                                                                           |
@@ -225,13 +311,20 @@ Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-
 | 2    | *"Have I had any fraud flags?"*, as `CUST-1002`                                                                       | Recalls the `ORD-5002` fraud signal from a prior/separate context — episodic recall check.                                                                                                                                                                                         |
 
 
-## Cross-Cutting Verification (run against any agent above, not a separate demo)
+
+
+## Cross-Cutting Verification
+
+Run against any agent above — not a separate demo.
 
 ### Guardrails — Architecture D9
 
-**POC topics**: Input guardrails, Output guardrails, Safety filters, Prompt injection protection, Jailbreak protection, Content moderation, PII masking, Hallucination mitigation.
+**POC topics:** Input guardrails, Output guardrails, Safety filters, Prompt injection protection, Jailbreak protection, Content moderation, PII masking, Hallucination mitigation.
 
-**Scope in this POC:** Input guardrails (injection/jailbreak heuristics) and PII masking are **real, deterministic** checks. Output "hallucination" mitigation is **not** a second LLM judging the first — it is (a) RAG grounding, (b) heuristic flags logged to H2, and (c) **you** comparing the answer to source docs in the Playbook.
+**Scope in this POC:**
+
+- Input guardrails (injection/jailbreak heuristics) and PII masking are **real, deterministic** checks.
+- Output "hallucination" mitigation is **not** a second LLM judging the first. It is (a) RAG grounding, (b) heuristic flags logged to H2, and (c) **you** comparing the answer to source docs in the Playbook.
 
 
 | Query                                                                       | Expected                                                                                                                                                    | How to demo / verify                                                                                                                                                                                                  |
@@ -242,24 +335,35 @@ Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-
 | *(use §7.4)* *"What's your policy on interstellar shipping?"*               | Says policy does not cover this; does **not** invent a policy.                                                                                              | **Hallucination demo:** Langfuse retrieval span shows no/low relevant chunks → answer admits gap. Compare to §7.1–3 where chunks *were* retrieved. This is the intended teaching moment — not an automated LLM judge. |
 
 
+
+
 ### Observability — Architecture D10
 
-**POC topics**: Execution traces, Agent events, Tool execution, Token usage, Latency, Errors, Cost monitoring, Logs, Metrics; integrations OpenTelemetry, Langfuse.
+**POC topics:** Execution traces, Agent events, Tool execution, Token usage, Latency, Errors, Cost monitoring, Logs, Metrics; integrations OpenTelemetry, Langfuse.
 
-For any scenario above, open Langfuse and confirm: one trace per conversational turn; child spans for each tool call and model call; token usage + latency populated; if a tool errors, the span shows error status rather than silently succeeding.
+For any scenario above, open Langfuse and confirm:
+
+- One trace per conversational turn
+- Child spans for each tool call and model call
+- Token usage + latency populated
+- If a tool errors, the span shows error status rather than silently succeeding
+
+
 
 ### Model Routing — Architecture D11
 
-**POC topics**: Model configuration (provider switch, no code change).
+**POC topics:** Model configuration (provider switch, no code change).
 
 1. With `llm.provider=ollama` (default), rerun Scenario 1 — works against local qwen2.5:7b.
-2. Set `llm.provider=gemini` (and a valid `GEMINI_API_KEY`), restart, rerun Scenario 1 — same behavior, different model backend, **no code change**.
+2. Set `llm.provider=gemini` and a valid `GEMINI_API_KEY`, restart, rerun Scenario 1 — same behavior, different model backend, **no code change**.
 3. Repeat for `anthropic` / `openrouter` if you have those keys.
-4. For scenarios where qwen prose is weak but Langfuse shows correct tools/retrieval, rerun per the **cloud-model fallbacks** table in [Model reliability, evaluation & prompt engineering](#model-reliability-evaluation--prompt-engineering) (especially §4, §6, §7.2–7.3).
+4. For scenarios where qwen prose is weak but Langfuse shows correct tools/retrieval, rerun per the **cloud-model fallbacks** table above (especially §4, §6, §7.2–7.3).
+
+
 
 ### Evaluation Harness — Architecture D12
 
-**POC topics**: Evaluation — Golden datasets, Prompt evaluation, Agent evaluation, Tool evaluation.
+**POC topics:** Evaluation — Golden datasets, Prompt evaluation, Agent evaluation, Tool evaluation.
 
 Do **not** debug by editing a prompt in the Web UI and trying again. Tests are layered so a failure names the layer. Exact class names are finalized in `plan.md`.
 
@@ -272,9 +376,21 @@ Do **not** debug by editing a prompt in the Web UI and trying again. Tests are l
 | 3 Agent     | `mvn test -Dtest=EvaluationHarnessTest` | Yes                      | **Event stream:** which tools ran, in what order, routing target, confirmation pause. Plus `must_contain` facts. One case per Playbook scenario.    |
 
 
-If a Playbook step fails in the UI: open Langfuse, then run the **lowest** layer that could explain the trace (missing tool → 0; wrong chunk → 1; right context, wrong wording → 2; graph/routing → 3). Change prompts only after Layer 2 has a failing fixture, then make that fixture pass.
 
-**Prompt eval coverage (minimum):**
+
+### When a Playbook step fails
+
+1. Open Langfuse.
+2. Run the **lowest** layer that could explain the trace:
+  - missing tool → Layer 0
+  - wrong chunk → Layer 1
+  - right context, wrong wording → Layer 2
+  - graph/routing → Layer 3
+3. Change prompts only after Layer 2 has a failing fixture, then make that fixture pass.
+
+
+
+### Prompt eval coverage (minimum)
 
 
 | Agent                  | Frozen input                                              | Must hold                                                                                                                        |
@@ -286,7 +402,10 @@ If a Playbook step fails in the UI: open Langfuse, then run the **lowest** layer
 | `demo-hitl-approval`   | **Fake** order JSON: amount 350, threshold 200            | Model output requests approval; does not claim refund completed. *(Real confirmation flow tested in Layer 3 via Runner events.)* |
 
 
-**Workflow tests (Layer 3)** use `InMemoryRunner` and inspect events — e.g. sequential stages in order, parallel tools without strict sequencing, `transfer` to billing vs shipping, confirmation before refund. See `spec.md` → Testing Strategy → Workflow testing.
+
+
+### Workflow tests (Layer 3)
+
+Use `InMemoryRunner` and inspect events — e.g. sequential stages in order, parallel tools without strict sequencing, `transfer` to billing vs shipping, confirmation before refund. See `spec.md` → Testing Strategy → Workflow testing.
 
 Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — [adk-java#300](https://github.com/google/adk-java/issues/300)). Teams use JUnit + `InMemoryRunner` + event assertions instead; golden JSON mirrors Python eval-set fields for a future runner swap.
-
