@@ -15,55 +15,45 @@ Diagrams use short labels; the surrounding prose holds the detail. Every ADK/Qdr
 Single JVM process. `SupportAssistantApplication` is the only `@SpringBootApplication`; it hosts both our code and ADK's Dev UI/REST server in one Spring context (`scanBasePackages = {"com.poc.adk", "com.google.adk.web"}` — no `AdkWebServer.start(...)` call [[1]](#references)).
 
 ```mermaid
-flowchart TB
-    subgraph Client
-        WebUI[ADK Web UI]
-        REST[REST client]
+flowchart LR
+    subgraph Clients
+        WebUI[Web UI]
+        REST[REST]
     end
 
-    subgraph JVM[Spring Boot JVM]
-        AdkWeb[ADK Dev UI]
-        Loader[Agent loader]
+    subgraph JVM["Spring Boot JVM"]
+        direction TB
+        Entry[ADK Dev UI]
+        Loader[agent loader]
         Agents[demo agents]
-        Shared[tools / RAG / memory]
-        Routing[ModelFactory]
-        OTel[OTel exporter]
+        Shared[tools · RAG · memory]
+        MF["ModelFactory\nllm.provider"]
+        Entry --> Loader --> Agents
+        Agents --> Shared
+        Agents --> MF
     end
 
-    subgraph Data
+    subgraph External
+        direction TB
         H2[(H2)]
         Qdrant[(Qdrant)]
+        LLM["Chat LLM\nOllama · Gemini · Claude · OpenRouter"]
+        LF[(Langfuse)]
     end
 
-    subgraph LLM[Chat models]
-        Ollama[Ollama]
-        Gemini[Gemini]
-        Claude[Claude]
-        OpenRouter[OpenRouter]
-    end
-
-    Langfuse[(Langfuse)]
-
-    WebUI --> AdkWeb
-    REST --> AdkWeb
-    AdkWeb --> Loader
-    Loader --> Agents
-    Agents --> Shared
-    Agents --> Routing
+    WebUI --> Entry
+    REST --> Entry
     Shared --> H2
     Shared --> Qdrant
-    Routing --> Ollama
-    Routing --> Gemini
-    Routing --> Claude
-    Routing --> OpenRouter
-    Agents -.-> OTel
-    Shared -.-> OTel
-    OTel --> Langfuse
+    MF --> LLM
+    Agents -.->|OTel| LF
+    Shared -.->|OTel| LF
 ```
 
 - REST surface: `/run`, `/run_sse`. Agent discovery: `CompiledAgentLoader` scans `adk.agents.source-dir` for `ROOT_AGENT`.
 - H2 file DB at `./data/support-assistant`. Qdrant and Langfuse run in Docker (`:6334` gRPC, `:3000` UI).
-- Chat LLMs are switchable via `llm.provider`. Dense embeddings are local Ollama `nomic-embed-text` (not routed through `BaseLlm`).
+- `ModelFactory` reads `llm.provider` and returns one ADK `BaseLlm` — agents never hard-code a vendor. Switching `ollama` → `gemini` is config-only (see [§5](#5-model-routing--d11)).
+- Dense embeddings (`nomic-embed-text`) go through `EmbeddingClient` → Ollama directly, not through `ModelFactory`.
 
 ---
 
