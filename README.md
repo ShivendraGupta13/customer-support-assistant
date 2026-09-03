@@ -1,121 +1,166 @@
 # Customer Support Investigation Assistant
 
-Google ADK Java (1.9.0) learning POC for **Northwind Retail** — a support agent that investigates orders, payments, shipping, fraud, and policy questions. Interaction surface is the ADK Dev UI and REST API (no custom frontend).
+[![Java 25](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-4.0.2-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![Google ADK Java](https://img.shields.io/badge/Google_ADK_Java-1.9.0-blue.svg)](https://github.com/google/adk-java)
+[![Qdrant](https://img.shields.io/badge/Qdrant-v1.15.3-red.svg)](https://qdrant.tech/)
+[![Langfuse](https://img.shields.io/badge/Langfuse-v3.95.0-purple.svg)](https://langfuse.com/)
 
-Requirements: [docs/spec.md](docs/spec.md). Manual scenarios: [docs/playbook.md](docs/playbook.md).
+A production-grade Google ADK Java (1.9.0) proof-of-concept for **Northwind Retail** — an intelligent customer support assistant that investigates orders, payments, shipping, fraud alerts, policy questions, and returns using multi-agent architectures, RAG, and memory personalization.
 
-## Quick start
+---
 
-1. Pull Ollama models and start the server (see [Prerequisites](#prerequisites)).
-2. Start Qdrant and Langfuse: `docker compose up -d`
-3. Build and run: `mvn compile exec:java`
-4. Open [http://localhost:8000](http://localhost:8000) and confirm all eight `demo-*` agents appear in the dropdown.
-5. Follow [docs/playbook.md](docs/playbook.md) from Global Setup.
+## 💡 Overview & Architecture
 
-## Prerequisites
+The assistant exposes **eight demo agents** through the Google ADK Dev UI and REST APIs. It integrates local infrastructure for vector storage, observability tracing, and local LLM execution.
 
-- **Java 25** (`java -version`)
-- **Maven 3.9+** (`mvn -v`)
-- **Google ADK Java** `google-adk` / `google-adk-dev` **1.9.0** (Spring Boot **4.0.2** transitive — pinned in `pom.xml`)
-- **Ollama** with `qwen2.5:7b` (chat) and `nomic-embed-text` (policy embeddings)
-- **Docker** for Qdrant (RAG) and Langfuse (traces)
+```mermaid
+graph TD
+    Client[ADK Dev UI / REST API :8000] --> Application[SupportAssistantApplication]
+    Application --> ADK[Google ADK Java 1.9.0 Framework]
+    
+    subgraph Agent Architecture
+        ADK --> Agents[8 Multi-Agent Workflows]
+        Agents --> Single[Single Agent]
+        Agents --> Seq[Sequential Workflow]
+        Agents --> Par[Parallel Workflow]
+        Agents --> Dyn[Dynamic Router]
+        Agents --> HITL[HITL Approval]
+        Agents --> Loop[Loop Refinement]
+        Agents --> RAG[RAG Policy Engine]
+        Agents --> Mem[Memory Personalization]
+    end
 
-```bash
-ollama pull qwen2.5:7b
-ollama pull nomic-embed-text
-ollama serve
+    subgraph Data & Infra Services
+        Application --> H2[(H2 Database / Persistence)]
+        RAG --> Qdrant[(Qdrant Vector DB :6334)]
+        Application --> Langfuse[Langfuse Tracing :3000]
+        Application --> Ollama[Ollama LLM :11434]
+    end
 ```
 
-Ollama should be at `http://localhost:11434`. Embeddings are required at startup so policy documents can be indexed into Qdrant.
+---
 
-## Local infra (Qdrant + Langfuse)
+## 🚀 Quick Start
 
-Pins: Qdrant **v1.15.3** (BM25), Langfuse **3.95.0** (≥ v3.22.0 OTLP).
+1. **Start Ollama models** (see [Prerequisites](#-prerequisites)):
+   ```bash
+   ollama pull qwen2.5:7b
+   ollama pull nomic-embed-text
+   ollama serve
+   ```
+
+2. **Launch Local Infra (Qdrant & Langfuse)**:
+   ```bash
+   docker compose up -d
+   ```
+
+3. **Build & Run Application**:
+   ```bash
+   mvn compile exec:java
+   ```
+
+4. **Access the Agent UI**:
+   Open [http://localhost:8000](http://localhost:8000) and verify that all eight `demo-*` agents appear in the application dropdown.
+
+5. **Run Manual Scenarios**:
+   Follow the step-by-step test scenarios in [docs/playbook.md](docs/playbook.md).
+
+---
+
+## 📋 Prerequisites
+
+| Component | Required Version | Description |
+| :--- | :--- | :--- |
+| **Java JDK** | `25` | Run `java -version` |
+| **Apache Maven** | `3.9+` | Run `mvn -v` |
+| **Google ADK Java** | `1.9.0` | Agent Development Kit (Spring Boot `4.0.2` transitive) |
+| **Ollama** | Latest | Chat model (`qwen2.5:7b`) & Embeddings (`nomic-embed-text`) |
+| **Docker Engine** | `20.10+` | Vector DB (Qdrant) & Telemetry (Langfuse) |
+
+---
+
+## 🛠️ Infrastructure & Environment
+
+### Local Services
+
+- **Qdrant Vector Database**: gRPC `:6334` | REST/Dashboard `:6333` (Pins: `v1.15.3` for BM25 support)
+- **Langfuse Telemetry UI**: [http://localhost:3000](http://localhost:3000) (Pins: `v3.95.0`)
+- **App Server**: [http://localhost:8000](http://localhost:8000)
+
+### Telemetry / Tracing Configuration
+
+For optional Langfuse tracing export:
+1. Create a project in the Langfuse UI ([http://localhost:3000](http://localhost:3000)).
+2. Export credentials via environment variables or edit `application.yml`:
+   ```bash
+   export LANGFUSE_PUBLIC_KEY="pk-lf-..."
+   export LANGFUSE_SECRET_KEY="sk-lf-..."
+   ```
+*Note: The application starts cleanly without keys; telemetry spans are only exported when credentials are present.*
+
+---
+
+## 🤖 Demo Agent Catalog
+
+| Agent Name | Pattern & Capability | Playbook Reference |
+| :--- | :--- | :--- |
+| `demo-single-agent` | Single-agent tool execution (Order & Shipping lookup) | [Playbook §1](docs/playbook.md#1-single-agent) |
+| `demo-sequential-investigation` | Chained multi-agent investigation (Order &rarr; Payment &rarr; Resolution) | [Playbook §2](docs/playbook.md#2-sequential-investigation) |
+| `demo-parallel-investigation` | Fan-out / Fan-in parallel multi-agent evaluation | [Playbook §3](docs/playbook.md#3-parallel-investigation) |
+| `demo-dynamic-routing` | Intent classification & dynamic workflow dispatch | [Playbook §4](docs/playbook.md#4-dynamic-routing) |
+| `demo-hitl-approval` | Human-in-the-loop approval gating for sensitive actions | [Playbook §5](docs/playbook.md#5-hitl-approval) |
+| `demo-loop-refinement` | Iterative feedback loop & quality refinement | [Playbook §6](docs/playbook.md#6-loop-refinement) |
+| `demo-rag-policy` | Qdrant hybrid vector search for Northwind policy retrieval | [Playbook §7](docs/playbook.md#7-rag-policy) |
+| `demo-memory-personalization` | Long-term preference recall and customer state binding | [Playbook §8](docs/playbook.md#8-memory-personalization) |
+
+---
+
+## 🔄 LLM Provider Switching
+
+Switching LLM providers requires zero code changes. Update `llm.provider` in `application.yml` or set environment variables:
+
+- **Ollama** (Default local): `llm.provider=ollama`
+- **Google Gemini**: `llm.provider=gemini` (`GEMINI_API_KEY`)
+- **Anthropic**: `llm.provider=anthropic` (`ANTHROPIC_API_KEY`)
+- **OpenRouter**: `llm.provider=openrouter` (`OPENROUTER_API_KEY`)
+
+---
+
+## 🧪 Evaluation Harness (Layers 0–3)
+
+Evaluate agent accuracy, prompt safety, and tool execution without subjective LLM-as-judge overhead:
 
 ```bash
-docker compose up -d
+# Layer 0 — Tool logic & Guardrails (No LLM required)
+mvn test -Dtest=ToolEvalTest,GuardrailEvalTest
+
+# Layer 1 — Policy Retrieval (Qdrant vector search, no chat LLM)
+mvn test -Dtest=RetrievalEvalTest
+
+# Layer 2 — Prompt & Determinism (Ollama @ temp 0)
+mvn test -Dtest=PromptEvalTest
+
+# Layer 3 — End-to-end multi-agent evaluation harness
+mvn test -Dtest=EvaluationHarnessTest
 ```
 
-- Qdrant gRPC: `localhost:6334` (REST/dashboard `:6333`)
-- Langfuse UI: [http://localhost:3000](http://localhost:3000)
+*Note: Running `mvn test` directly executes Layers 0–1 and individual Layer 3 evaluation tests cleanly.*
 
-For trace export, create a Langfuse project and set `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (or edit `observability.public-key` / `observability.secret-key` in `application.yml`). The app starts without keys; spans export only when credentials are set.
+---
 
-## Build and run
+## 👥 AI Agent & Developer Guidelines
 
-```bash
-mvn compile exec:java
-```
+This repository strictly adheres to **Andrej Karpathy's Coding Guidelines** and the **Agent Skills Lifecycle**:
 
-`exec-maven-plugin` launches `com.poc.adk.SupportAssistantApplication`. Agent discovery uses `adk.agents.source-dir=target` (set in `application.yml`). Server listens on [http://localhost:8000](http://localhost:8000).
+- **[AGENTS.md](AGENTS.md)**: Repository guidelines (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution).
+- **[.agents/](.agents/)**: Self-contained skills (`.agents/skills/`), specialist subagents (`.agents/agents/`), and workflow rules (`.agents/rules/`).
 
-Equivalent explicit form:
+---
 
-```bash
-mvn compile exec:java \
-  -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
-  -Dexec.args="--adk.agents.source-dir=target --server.port=8000"
-```
+## 📚 Documentation Links
 
-Use `target`, not `target/classes` — the latter breaks `CompiledAgentLoader` agent discovery.
-
-H2 domain data persists under `./data/support-assistant` (gitignored).
-
-## Verify
-
-1. Open [http://localhost:8000](http://localhost:8000) and confirm the agent dropdown lists every `demo-*` agent:
-
-   | Agent | Playbook |
-   | --- | --- |
-   | `demo-single-agent` | §1 |
-   | `demo-sequential-investigation` | §2 |
-   | `demo-parallel-investigation` | §3 |
-   | `demo-dynamic-routing` | §4 |
-   | `demo-hitl-approval` | §5 |
-   | `demo-loop-refinement` | §6 |
-   | `demo-rag-policy` | §7 |
-   | `demo-memory-personalization` | §8 |
-
-2. Check app logs: H2 seed data loaded, and policy documents indexed into Qdrant (`policy_chunks`).
-
-Then follow [docs/playbook.md](docs/playbook.md) from Global Setup.
-
-## Creating a customer identity for a session
-
-Long-term preference recall (Playbook §8) uses `customer_id` in **initial session state**. `appName` must match the Dev UI dropdown (`demo-memory-personalization`). `userId` is `playbook-user`.
-
-```bash
-# Priya (CUST-1001)
-curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
-  -H "Content-Type: application/json" \
-  -d '{"state":{"customer_id":"CUST-1001"}}'
-
-# Alex (CUST-1002) — new session
-curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
-  -H "Content-Type: application/json" \
-  -d '{"state":{"customer_id":"CUST-1002"}}'
-
-# Prove state stuck: replace SESSION_ID from the create response
-curl -s "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions/SESSION_ID"
-```
-
-Expected: each create response includes the matching `customer_id`. Dev UI alternative: **More options → Update state**. `bind_customer` is not required.
-
-## LLM provider switch
-
-No code change — set `llm.provider` in `application.yml` to `ollama`, `gemini`, `anthropic`, or `openrouter`, add the provider API key if needed, and restart.
-
-## Evaluation (Layers 0–3)
-
-Localize a Playbook miss before editing a prompt. Full command reference: [tasks/plan.md](tasks/plan.md) → Evaluation harness commands.
-
-```bash
-mvn test -Dtest=ToolEvalTest,GuardrailEvalTest   # Layer 0 — no LLM
-mvn test -Dtest=RetrievalEvalTest                # Layer 1 — Qdrant, no chat LLM
-mvn test -Dtest=PromptEvalTest                   # Layer 2 — Ollama, temperature 0
-mvn test -Dtest=EvaluationHarnessTest            # Layer 3 — ScriptedLlm, no LLM-as-judge
-```
-
-`mvn test` (no `-Dtest`) runs Layers 0–1 and the eight Layer 3 `*EvalTest` classes directly; `EvaluationHarnessTest` is excluded so Layer 3 is not executed twice.
-
-Do not use the ADK Web Eval tab (unimplemented in Java: [adk-java#300](https://github.com/google/adk-java/issues/300)).
+- **Requirements & Specification**: [docs/spec.md](docs/spec.md)
+- **Manual Test Scenarios (Playbook)**: [docs/playbook.md](docs/playbook.md)
+- **Task & Implementation Plan**: [tasks/plan.md](tasks/plan.md)
+- **Agent Rules & Guidelines**: [AGENTS.md](AGENTS.md)
