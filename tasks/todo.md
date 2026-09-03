@@ -181,13 +181,13 @@ mvn compile exec:java
 **Description:** Every later agent run can show traces in Langfuse. Export is OTLP/HTTP protobuf, not gRPC.
 
 **Acceptance criteria:**
-- [ ] `ObservabilityConfig` builds OpenTelemetry SDK with OTLP/HTTP to Langfuse `/api/public/otel`, Basic Auth, header `x-langfuse-ingestion-version: 4`
-- [ ] Tracer is reachable via `TracingContext` for agent/tool/model spans. `TracingContext` is populated by a `@Bean` during context refresh, not an `ApplicationRunner`
+- [x] `ObservabilityConfig` builds OpenTelemetry SDK with OTLP/HTTP to Langfuse `/api/public/otel`, Basic Auth, header `x-langfuse-ingestion-version: 4`
+- [x] Tracer is reachable via `TracingContext` for agent/tool/model spans. `TracingContext` is populated by a `@Bean` during context refresh, not an `ApplicationRunner`
 
 **Verification:**
-- [ ] Tests pass: config/smoke test if practical without a live Langfuse; otherwise compile + Task 12 Langfuse check
-- [ ] Build succeeds: `mvn -q compile`
-- [ ] Manual check: Langfuse UI reachable; a later demo (Task 12) shows one trace per turn
+- [x] Tests pass: `ObservabilityConfigTest` (OTLP/HTTP protobuf smoke, no live Langfuse), `TracingContextTest`, `ObservabilityIntegrationConfigTest`
+- [x] Build succeeds: `mvn -q compile` / `mvn -q test`
+- [x] Manual check: Langfuse UI reachable (`/api/public/health` → OK on `:3000`, image 3.95.0); a later demo (Task 12) shows one trace per turn
 
 **Dependencies:** Task 3, Task 4, Task 5, Task 6
 

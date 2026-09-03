@@ -5,6 +5,11 @@ adk:
   agents:
     source-dir: target
 
+observability:
+  endpoint: http://localhost:3000/api/public/otel
+  public-key: ${LANGFUSE_PUBLIC_KEY:}
+  secret-key: ${LANGFUSE_SECRET_KEY:}
+
 llm:
   provider: ollama # ollama | gemini | anthropic | openrouter
   ollama:
