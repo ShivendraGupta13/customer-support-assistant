@@ -1,0 +1,21 @@
+{
+  "prompt": "prompts/demo-single-agent.v1.md",
+  "cases": [
+    {
+      "id": "ord-5001-delayed",
+      "user_message": "What's the status of order ORD-5001?",
+      "frozen_tool_results": {
+        "order_lookup": {
+          "id": "ORD-5001",
+          "customer_id": "CUST-1001",
+          "product_name": "Wireless Headphones",
+          "amount": 129.99,
+          "status": "DELAYED",
+          "created_at": "2026-08-01T10:00:00"
+        }
+      },
+      "must_contain": ["DELAYED"],
+      "must_not_contain": ["SwiftShip", "350"]
+    }
+  ]
+}

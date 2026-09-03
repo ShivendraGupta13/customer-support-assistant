@@ -364,15 +364,15 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** Hello-world `LlmAgent` with order lookup and short-term memory (turn 2 must not re-ask which order).
 
 **Acceptance criteria:**
-- [ ] Agent selectable in Dev UI; Playbook §1 step 1 reports DELAYED via `order_lookup`; step 2 resolves “it” to ORD-5001
-- [ ] Layer 2 frozen-tool fixture and Layer 3 events include `tool_call` → `order_lookup` for step 1
-- [ ] Playbook guardrail queries (Ignore instructions / DAN / card `4111-…`) refused or masked; H2 audit row where applicable
-- [ ] Langfuse: one trace per turn with tool and model child spans; token usage / latency populated where available
-- [ ] If a cloud key is set: switch `llm.provider`, restart, rerun §1 — same behavior, no code change (Playbook D11)
+- [x] Agent selectable in Dev UI; Playbook §1 step 1 reports DELAYED via `order_lookup`; step 2 resolves “it” to ORD-5001
+- [x] Layer 2 frozen-tool fixture and Layer 3 events include `tool_call` → `order_lookup` for step 1
+- [x] Playbook guardrail queries (Ignore instructions / DAN / card `4111-…`) refused or masked; H2 audit row where applicable
+- [x] Langfuse: one trace per turn with tool and model child spans; token usage / latency populated where available
+- [x] If a cloud key is set: switch `llm.provider`, restart, rerun §1 — same behavior, no code change (Playbook D11)
 
 **Verification:**
-- [ ] Tests pass: Layer 2/3 cases for this agent
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 2/3 cases for this agent
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §1 + Cross-Cutting Guardrails + Observability D10; D11 if a cloud key is present
 
 **Dependencies:** Tasks 6, 7, 8, 9, 10
@@ -390,12 +390,12 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** `SequentialAgent` as `ROOT_AGENT`; gather → policy → draft via `outputKey`. Missing order does not crash the pipeline.
 
 **Acceptance criteria:**
-- [ ] Stages run gather → policy_check → draft; ORD-9999 yields not-found, pipeline completes
-- [ ] Layer 3 asserts stage order / `outputKey` chaining
+- [x] Stages run gather → policy_check → draft; ORD-9999 yields not-found, pipeline completes
+- [x] Layer 3 asserts stage order / `outputKey` chaining
 
 **Verification:**
-- [ ] Tests pass: Layer 3 sequential event assertions
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 3 sequential event assertions
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §2; Langfuse sequential spans
 
 **Dependencies:** Task 12, Task 11c (policy stage)
@@ -412,12 +412,12 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** Fan-out payment / shipment / fraud inside a `SequentialAgent` root, then aggregator. Seeded fraud on ORD-5002 must appear.
 
 **Acceptance criteria:**
-- [ ] Response cites `MULTIPLE_SHIPPING_ADDRESSES` score 0.82 plus payment/shipment
-- [ ] Layer 3: three check tool calls in one turn without requiring A→B→C order; aggregator follows
+- [x] Response cites `MULTIPLE_SHIPPING_ADDRESSES` score 0.82 plus payment/shipment
+- [x] Layer 3: three check tool calls in one turn without requiring A→B→C order; aggregator follows
 
 **Verification:**
-- [ ] Tests pass: Layer 3 parallel event assertions
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 3 parallel event assertions
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §3; Langfuse child spans overlap in time
 
 **Dependencies:** Task 12
@@ -430,7 +430,7 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 
 ## Checkpoint: After Tasks 12-14
 
-- [ ] §1–3 Playbook paths work; Layers 2–3 for these agents green
+- [x] §1–3 Playbook paths work; Layers 2–3 for these agents green
 - [ ] Review with human before routing/HITL/loop
 
 ## Task 15: demo-dynamic-routing (Playbook §4)

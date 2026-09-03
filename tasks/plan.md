@@ -95,9 +95,9 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 
 ### Phase 2: Demo agents (one Playbook section each)
 
-- [ ] Task 12: `demo-single-agent` (Playbook §1)
-- [ ] Task 13: `demo-sequential-investigation` (§2)
-- [ ] Task 14: `demo-parallel-investigation` (§3)
+- [x] Task 12: `demo-single-agent` (Playbook §1)
+- [x] Task 13: `demo-sequential-investigation` (§2)
+- [x] Task 14: `demo-parallel-investigation` (§3)
 - [ ] Task 15: `demo-dynamic-routing` (§4)
 - [ ] Task 16: `demo-hitl-approval` (§5)
 - [ ] Task 17: `demo-loop-refinement` (§6)

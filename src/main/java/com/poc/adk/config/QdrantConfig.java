@@ -58,6 +58,11 @@ public class QdrantConfig {
   }
 
   @Bean
+  com.poc.adk.tools.PolicyRetrievalTool policyRetrievalTool(HybridRetriever hybridRetriever) {
+    return new com.poc.adk.tools.PolicyRetrievalTool(hybridRetriever);
+  }
+
+  @Bean
   PolicyChunkIndexer policyChunkIndexer(
       QdrantClient qdrantClient, ChunkingService chunkingService, EmbeddingClient embeddingClient) {
     return new PolicyChunkIndexer(qdrantClient, chunkingService, embeddingClient);
