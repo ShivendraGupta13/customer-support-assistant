@@ -257,14 +257,14 @@ mvn compile exec:java
 **Description:** Deterministic input/output callbacks applied through a shared builder helper so no demo agent is exempt.
 
 **Acceptance criteria:**
-- [ ] `InputGuardrailCallback` / `OutputGuardrailCallback`, `PiiMasker`, `PromptInjectionHeuristics`, `GuardrailAuditService` → H2
-- [ ] `beforeToolCallback` / `afterToolCallback` are audit-only hooks (no second safety model); a tool invocation writes an audit row
-- [ ] Layer 0 tests: injection/jailbreak flagged; card number masked; audit row written. No second LLM judge
+- [x] `InputGuardrailCallback` / `OutputGuardrailCallback`, `PiiMasker`, `PromptInjectionHeuristics`, `GuardrailAuditService` → H2
+- [x] `beforeToolCallback` / `afterToolCallback` are audit-only hooks (no second safety model); a tool invocation writes an audit row
+- [x] Layer 0 tests: injection/jailbreak flagged; card number masked; audit row written. No second LLM judge
 
 **Verification:**
-- [ ] Tests pass: focused guardrail unit tests (no LLM)
-- [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: Playbook guardrail queries are Task 12
+- [x] Tests pass: focused guardrail unit tests (no LLM)
+- [x] Build succeeds: `mvn -q test`
+- [x] Manual check: Playbook guardrail queries are Task 12
 
 **Dependencies:** Task 5, Task 6
 

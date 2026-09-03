@@ -31,6 +31,21 @@ public class GuardrailAuditLog {
 
   protected GuardrailAuditLog() {}
 
+  public GuardrailAuditLog(
+      String id,
+      String sessionId,
+      String direction,
+      String ruleTriggered,
+      String action,
+      LocalDateTime createdAt) {
+    this.id = id;
+    this.sessionId = sessionId;
+    this.direction = direction;
+    this.ruleTriggered = ruleTriggered;
+    this.action = action;
+    this.createdAt = createdAt;
+  }
+
   public String getId() {
     return id;
   }

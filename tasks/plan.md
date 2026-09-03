@@ -82,7 +82,7 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 - [x] Task 7: `observability`
 - [x] Task 8: `shared-tools` + Layer 0
 - [x] Task 9: `memory-services`
-- [ ] Task 10: `guardrails`
+- [x] Task 10: `guardrails`
 - [ ] Task 11a: Policy markdown fixtures
 - [ ] Task 11b: Chunking + `EmbeddingClient`
 - [ ] Task 11c: Hybrid retriever + Layer 1
