@@ -76,7 +76,7 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 - [ ] Review with human before Phase 1
 ### Phase 1: Shared infrastructure
 
-- [ ] Task 4: Docker Compose (Qdrant ≥ 1.15.2, Langfuse ≥ v3.22.0)
+- [x] Task 4: Docker Compose (Qdrant ≥ 1.15.2, Langfuse ≥ v3.22.0)
 - [ ] Task 5: `domain-data` — JPA matches `schema.sql`; `data.sql` load proven
 - [ ] Task 6: `model-routing`
 - [ ] Task 7: `observability`

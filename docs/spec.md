@@ -431,7 +431,7 @@ src/main/resources/prompts/    → versioned agent instructions (`{agent}.v1.md`
 src/test/resources/eval/       → golden datasets + prompt-eval fixtures
 src/test/java/...
 docs/           → spec.md, playbook.md, architecture.md, plan.md (this series)
-docker/         → docker-compose for Qdrant + Langfuse
+docker-compose.yml → Qdrant + Langfuse (repo root)
 data/           → H2 file-mode database (gitignored)
 ```
 

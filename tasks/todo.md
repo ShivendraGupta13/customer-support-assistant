@@ -108,18 +108,19 @@ mvn compile exec:java
 **Description:** Pin the local vector store and trace UI so RAG and observability have somewhere to talk to.
 
 **Acceptance criteria:**
-- [ ] `docker/docker-compose.yml` pins Qdrant **≥ 1.15.2** (BM25 inference) and Langfuse **≥ v3.22.0** (OTLP/HTTP)
-- [ ] Qdrant gRPC `:6334` and Langfuse UI `:3000` come up with `docker compose -f docker/docker-compose.yml up -d`
+- [x] `docker-compose.yml` (repo root) pins Qdrant **≥ 1.15.2** (BM25 inference) and Langfuse **≥ v3.22.0** (OTLP/HTTP)
+- [x] Qdrant gRPC `:6334` and Langfuse UI `:3000` come up with `docker compose up -d`
 
 **Verification:**
-- [ ] Tests pass: n/a
-- [ ] Build succeeds: n/a
-- [ ] Manual check: both containers healthy; ports match `docs/architecture.md` §1 / §7.2
+- [x] Tests pass: n/a
+- [x] Build succeeds: n/a
+- [x] Manual check: both containers healthy; ports match `docs/architecture.md` §1 / §7.2
+  (2026-09-03: `qdrant/qdrant:v1.15.2` gRPC `:6334` + REST ready; `langfuse/langfuse:3.95.0` `/api/public/health` → OK on `:3000`)
 
 **Dependencies:** None
 
 **Files likely touched:**
-- `docker/docker-compose.yml`
+- `docker-compose.yml`
 
 **Estimated scope:** Small: 1-2 files
 

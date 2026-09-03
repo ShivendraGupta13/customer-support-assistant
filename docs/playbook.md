@@ -50,7 +50,7 @@ Server should be available at `http://localhost:11434`.
 **Docker** — start Qdrant and Langfuse:
 
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+docker compose up -d
 ```
 
 

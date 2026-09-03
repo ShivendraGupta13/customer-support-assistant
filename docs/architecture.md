@@ -157,7 +157,7 @@ src/main/resources/
   policies/{refund,shipping,fraud,loyalty}-policy.md
   prompts/{agent}.v1.md
 src/test/resources/eval/*.eval.json
-docker/docker-compose.yml        // Qdrant (>= 1.15.2) + Langfuse
+docker-compose.yml                // Qdrant (>= 1.15.2) + Langfuse (repo root)
 data/                             // H2 file-mode DB, gitignored
 ```
 
@@ -562,7 +562,7 @@ Tool callbacks (`beforeToolCallback` / `afterToolCallback`) wrap tool execution 
 
 ### 7.2 Observability — D10
 
-Langfuse's OTLP endpoint requires HTTP (protobuf or JSON) — gRPC is not supported — and self-hosted Langfuse must be ≥ v3.22.0 [[14]](#references). `docker/docker-compose.yml` pins a compatible image.
+Langfuse's OTLP endpoint requires HTTP (protobuf or JSON) — gRPC is not supported — and self-hosted Langfuse must be ≥ v3.22.0 [[14]](#references). Root `docker-compose.yml` pins a compatible image.
 
 ```mermaid
 flowchart LR

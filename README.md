@@ -11,6 +11,17 @@ Google ADK Java (1.9.0) POC for **Northwind Retail** — a support agent that in
 
 Ollama, Docker (Qdrant, Langfuse), and H2/JPA are **not** required for the bootstrap stub or session API check below.
 
+## Local infra (Qdrant + Langfuse)
+
+Needed from Phase 1 onward (RAG / observability). Pins: Qdrant **v1.15.2** (BM25), Langfuse **3.95.0** (≥ v3.22.0 OTLP).
+
+```bash
+docker compose up -d
+```
+
+- Qdrant gRPC: `localhost:6334` (REST/dashboard `:6333`)
+- Langfuse UI: http://localhost:3000
+
 ## Build and run
 
 ```bash
