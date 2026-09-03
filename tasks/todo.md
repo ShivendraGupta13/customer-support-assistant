@@ -438,12 +438,12 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** Coordinator emits `transfer_to_agent`; ADK `AutoFlow` resolves specialists. CI may use `TestLlm` if qwen routing is flaky.
 
 **Acceptance criteria:**
-- [ ] Refund query → billing; delay query → shipping; preference query → account
-- [ ] Layer 3 asserts transfer target; flaky cases use `TestLlm`
+- [x] Refund query → billing; delay query → shipping; preference query → account
+- [x] Layer 3 asserts transfer target; flaky cases use `TestLlm`
 
 **Verification:**
-- [ ] Tests pass: Layer 2 coordinator fixture + Layer 3 transfer events
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 2 coordinator fixture + Layer 3 transfer events
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §4; Langfuse nested coordinator then specialist
 
 **Dependencies:** Task 12
@@ -460,13 +460,13 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** Refund above $200 pauses for confirmation. Threshold lives inside `RefundTool`, not a static `requireConfirmation` flag. Reject must not write H2.
 
 **Acceptance criteria:**
-- [ ] ORD-5010 (350) emits `adk_request_confirmation`; FunctionResponse shape matches architecture §2.3
-- [ ] Approve path refunds; reject path leaves H2 unchanged; live demo is Web UI dialog, not Postman
-- [ ] Layer 2 fixture: frozen order JSON amount 350 / threshold 200 → requests approval; does not claim refund completed
+- [x] ORD-5010 (350) emits `adk_request_confirmation`; FunctionResponse shape matches architecture §2.3
+- [x] Approve path refunds; reject path leaves H2 unchanged; live demo is Web UI dialog, not Postman
+- [x] Layer 2 fixture: frozen order JSON amount 350 / threshold 200 → requests approval; does not claim refund completed
 
 **Verification:**
-- [ ] Tests pass: Layer 2 eval fixture + Layer 3 `InMemoryRunner` injects `confirmed: true/false`
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 2 eval fixture + Layer 3 `InMemoryRunner` injects `confirmed: true/false`
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §5 Approve and Reject in Dev UI
 
 **Dependencies:** Task 12, Task 5
@@ -483,12 +483,13 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** `LoopAgent` draft → critique until escalate/`exit_loop` or `maxIterations = 3`. Publisher sibling emits only the final draft.
 
 **Acceptance criteria:**
-- [ ] User sees final refined draft only; Langfuse shows 2+ iterations on the happy path
-- [ ] Forced-fail / unsatisfiable case hits `max_iterations` and still publishes a best-effort draft
+- [x] User sees final refined draft only (Layer 3 event assertions)
+- [ ] Langfuse shows 2+ iterations on the happy path
+- [x] Forced-fail / unsatisfiable case hits `max_iterations` and still publishes a best-effort draft
 
 **Verification:**
-- [ ] Tests pass: Layer 3 iteration-count / escalate assertions
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 3 iteration-count / escalate assertions
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §6
 
 **Dependencies:** Task 12
@@ -502,7 +503,7 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 
 ## Checkpoint: After Tasks 15-17
 
-- [ ] Routing, HITL, loop Layer 3 green
+- [x] Routing, HITL, loop Layer 3 green
 - [ ] Review with human before RAG + personalization demos
 
 ## Task 18: demo-rag-policy (Playbook §7)

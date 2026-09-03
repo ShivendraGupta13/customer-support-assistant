@@ -98,9 +98,9 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 - [x] Task 12: `demo-single-agent` (Playbook §1)
 - [x] Task 13: `demo-sequential-investigation` (§2)
 - [x] Task 14: `demo-parallel-investigation` (§3)
-- [ ] Task 15: `demo-dynamic-routing` (§4)
-- [ ] Task 16: `demo-hitl-approval` (§5)
-- [ ] Task 17: `demo-loop-refinement` (§6)
+- [x] Task 15: `demo-dynamic-routing` (§4)
+- [x] Task 16: `demo-hitl-approval` (§5)
+- [x] Task 17: `demo-loop-refinement` (§6)
 - [ ] Task 18: `demo-rag-policy` (§7)
 - [ ] Task 19: `demo-memory-personalization` (§8)
 
