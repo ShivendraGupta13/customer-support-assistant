@@ -108,9 +108,7 @@ Each `demo-*` module registers its own `public static final BaseAgent ROOT_AGENT
 
 ## Application Bootstrap
 
-One class, one Spring context. `SupportAssistantApplication` is the `@SpringBootApplication`, scanning both our package and ADK's web layer.
-
-### Entry point
+`SupportAssistantApplication` is the sole `@SpringBootApplication`, scanning `com.northwind.support` and `com.google.adk.web`. That pulls ADK's Dev UI (`/dev-ui`), REST controllers (`/run`, `/run_sse`), and its beans into **our** Spring context — no `AdkWebServer.start(...)` call ([spring-boot#39943](https://github.com/spring-projects/spring-boot/issues/39943)).
 
 ```java
 @SpringBootApplication(scanBasePackages = {"com.northwind.support", "com.google.adk.web"})
@@ -126,27 +124,9 @@ mvn compile exec:java -Dexec.mainClass=com.northwind.support.SupportAssistantApp
   -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"
 ```
 
-### Why this works
-
-`AdkWebServer` is itself a `@SpringBootApplication`-annotated class (`@Configuration` under the hood) in `com.google.adk.web`. Scanning that package pulls in its `@Bean`s (`sessionService`, `artifactService`, `memoryService`, …), its `WebMvcConfigurer` (the `/dev-ui` redirect + static resources), and its REST controllers — so `/dev-ui` and `/run` / `/run_sse` come up inside **our** context, with no `AdkWebServer.start(...)` call.
-
-This is expected Spring Boot behavior, not a hack: "If you have multiple `@Configuration` classes in packages covered by component scanning they should all be found." ([spring-boot#39943](https://github.com/spring-projects/spring-boot/issues/39943))
-
-### Bean-name collisions
-
-The failure mode from that same issue thread: two `@Configuration` classes producing a bean with the **same name** but different definitions fails startup with `BeanDefinitionOverrideException` (overriding is disabled by default since Spring Boot 2.1).
-
-`AdkWebServer` defines beans named `sessionService`, `artifactService`, `memoryService`, `objectMapper` (`@Primary`), `mappingJackson2HttpMessageConverter`. **Do not** define a bean with any of those names in `com.northwind.support`. If a real collision is ever needed, `spring.main.allow-bean-definition-overriding=true` is the documented escape hatch — avoid reaching for it by default.
-
-### Agent loading
-
-With no `AdkWebServer.start(...)` call, the default `CompiledAgentLoader` (`@ConditionalOnProperty(name="adk.agents.loader", havingValue="compiled", matchIfMissing=true)`) is active. It scans `--adk.agents.source-dir` for compiled classes with a `public static final BaseAgent ROOT_AGENT` field — the same mechanism as running `AdkWebServer` directly. Each `demo-*` module exposes that field.
-
-### Wiring agents to Spring beans
-
-`ROOT_AGENT` fields are not Spring beans. They are built at class-load time, whenever `CompiledAgentLoader` first loads that class (lazily, on first request). Do **not** constructor-inject into agent classes.
-
-Because our own package is scanned normally, JPA repos, the Qdrant client, and OTel wiring are ordinary `@Service`/`@Repository` beans — no AutoConfiguration guesswork needed. Agent classes reach them through a small `AppServices` static holder, populated once via an `ApplicationRunner` (or `ApplicationContextAware`) during startup. That always finishes before any HTTP request can trigger agent class-loading, so there is no ordering race.
+- **Agent loading** — default `CompiledAgentLoader` scans `--adk.agents.source-dir` for `public static final BaseAgent ROOT_AGENT` on each `demo-*` class.
+- **Spring wiring** — `ROOT_AGENT` is not a Spring bean; agent classes reach JPA/Qdrant/OTel via a static `AppServices` holder populated at startup (`ApplicationRunner`), before any request loads agent classes.
+- **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` in `com.northwind.support`; `AdkWebServer` already registers them.
 
 ## Model Routing Config
 
@@ -175,6 +155,27 @@ llm:
 ### Switching providers
 
 Change `llm.provider` (and possibly the model string) in `application.yml` or via an environment variable override — no code change, no rebuild logic beyond a `ModelFactory` that switches on the enum.
+
+### Dev model vs quality bar
+
+`qwen2.5:7b` (Ollama) is the **default dev model** — free, local, good enough to exercise ADK wiring. It is **not** the quality bar for final prose, routing accuracy, or citation formatting. Layers 0–3 must pass on qwen (or `TestLlm` for deterministic graph tests); Layer 4 (manual Playbook) is best-effort on qwen. If Layer 3 passes but the answer "sounds wrong," treat it as model capacity or prompt polish — check Langfuse first; correct tool and retrieval spans mean the pipeline worked.
+
+### Cloud-model fallbacks (demo polish)
+
+Switch `llm.provider` when Langfuse shows correct tools/retrieval but prose or routing UX is weak. Layers 0–1 never need cloud models.
+
+| Playbook | Agent | Rerun with `gemini` or `anthropic` when |
+| -------- | ----- | --------------------------------------- |
+| §1 | `demo-single-agent` | Tool args wrong after prompt fix (rare) |
+| §2 | `demo-sequential-investigation` | Final prose muddled but all stages completed in trace |
+| §3 | `demo-parallel-investigation` | Aggregator omits fraud score despite correct tool JSON |
+| §4 | `demo-dynamic-routing` | Coordinator routes to wrong specialist on 2+ of 3 queries (use `TestLlm` in CI) |
+| §5 | `demo-hitl-approval` | — (confirmation is structural) |
+| §6 | `demo-loop-refinement` | Refined apology still violates tone after `max_iterations` |
+| §7.2–7.3 | `demo-rag-policy` | `RetrievalEvalTest` passes but answer cites wrong doc or omits `source_path` / section |
+| §8 | `demo-memory-personalization` | Recalls wrong ticket/preference despite correct DB read in trace |
+
+**Suggested demo flow:** build and debug on qwen → run Layers 0–3 → for stakeholders, rerun §4, §7.2–7.3, and §6 once on a cloud model.
 
 ## Persistence Plan
 
@@ -263,7 +264,19 @@ Every agent run, tool call, and model call emits an OTel span with token usage /
 
 ### Prompts
 
-Versioned files under `src/main/resources/prompts/`, not string literals edited while staring at the Web UI. Changing a prompt is a code change that must pass the prompt-eval layer before it is considered done.
+Versioned files under `src/main/resources/prompts/{agent}.v1.md`, not string literals edited in the Web UI. Changing a prompt is a code change that must pass Layer 2 before it is considered done.
+
+Techniques used consistently across agents:
+
+1. **One job per agent** — specialists state what they do and what they never do.
+2. **Ground in tool/RAG output** — answer only from `tool_results` / `retrieved_chunks`; if missing, say so.
+3. **Explicit citation template** — e.g. `Source: {source_path} — {section_heading}` so Layer 2 can regex-check format.
+4. **One–two few-shot examples** per specialist (short input → expected tool call or transfer).
+5. **Temperature 0** in eval (`@Tag("llm")`); **0–0.3** for manual demos.
+6. **Version prompts** — change prompt ⇒ update matching `.eval.json` ⇒ re-run Layer 2 before Layer 3.
+7. **Negative instructions sparingly** — prefer "use only tool JSON fields X, Y" over long "do not hallucinate" lists.
+
+Workflow composition (sequential/parallel/routing/RAG) reduces per-call instruction load and fixes stage order, but does not remove the need for Layer 3 event assertions or occasional cloud-model reruns for demo polish.
 
 ### Evaluation
 
@@ -281,13 +294,15 @@ The failure mode to avoid: something looks wrong in the UI → tweak the system 
 
 ### Test layers
 
-| Layer              | What it proves                                                                                                      | LLM?                               | Command (indicative; finalized in `plan.md`) | Pass criteria                                                                                                                                                     |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0. Tool eval       | Domain tools + guardrail helpers return the right records / masks                                                   | No                                 | `mvn test -Dtest=ToolEvalTest`               | Exact values from seed data (order status, fraud score, PII masked).                                                                                              |
-| 1. Retrieval eval  | Chunking, citation metadata, dense vs hybrid ranking                                                                | No                                 | `mvn test -Dtest=RetrievalEvalTest`          | Hybrid query ranks the `NW-SHIP-EXC-04` chunk #1; dense-only does not; multi-policy query returns chunks from both named files.                                   |
-| 2. Prompt eval     | Given **frozen** context (canned tool JSON or policy chunks), does the **wording** of the reply match requirements? | Yes (`@Tag("llm")`, temperature 0) | `mvn test -Dtest=PromptEvalTest`             | `must_contain` / `must_not_contain` / citation regex. **Does not invoke real tools or retrieval.**                                                                |
-| 3. Agent eval      | Full `Runner` loop: did the agent **choose** the right tools/routes/workflow steps, and produce acceptable output?  | Yes (`@Tag("llm")`)                | `mvn test -Dtest=EvaluationHarnessTest`      | **Event-stream assertions** (tool name + args, transfer target, confirmation pause, sub-agent order) + `must_contain` seed facts. One case per Playbook scenario. |
-| 4. Manual Playbook | UX, Langfuse span shape, provider switch                                                                            | Yes, human                         | Playbook steps in the Web UI                 | Trace shape matches the Architecture diagram cited by that scenario.                                                                                              |
+Evaluate flakiness by **layer**, not by "did the Playbook look good once."
+
+| Layer              | What it proves                                                                                                      | LLM?                               | Pass on qwen? | Command (indicative; finalized in `plan.md`) | If it fails |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------- | -------------------------------------------- | ----------- |
+| 0. Tool eval       | Domain tools + guardrail helpers return the right records / masks                                                   | No                                 | Must pass     | `mvn test -Dtest=ToolEvalTest`               | Fix tool/repo — not a model issue |
+| 1. Retrieval eval  | Chunking, citation metadata, dense vs hybrid ranking                                                                | No                                 | Must pass     | `mvn test -Dtest=RetrievalEvalTest`          | Fix indexer/retriever — not a model issue |
+| 2. Prompt eval     | Given **frozen** context (canned tool JSON or policy chunks), does the **wording** of the reply match requirements? | Yes (`@Tag("llm")`, temperature 0) | After tuning  | `mvn test -Dtest=PromptEvalTest`             | Edit versioned prompt + eval fixture |
+| 3. Agent eval      | Full `Runner` loop: did the agent **choose** the right tools/routes/workflow steps, and produce acceptable output?  | Yes (`@Tag("llm")`)                | Must pass     | `mvn test -Dtest=EvaluationHarnessTest`      | Fix graph/prompt — not a retrieval issue |
+| 4. Manual Playbook | UX, Langfuse span shape, provider switch                                                                            | Yes, human                         | Best-effort   | Playbook steps in the Web UI                 | Not a regression if Layers 0–3 pass; see cloud fallbacks in Model Routing Config |
 
 ### Prompt eval fixtures
 
@@ -299,6 +314,16 @@ Live next to the prompt files (same version suffix, e.g. `demo-rag-policy.v1.md`
 - `must_contain`, `must_not_contain`, optional citation pattern
 
 The model is called **once per case** with that frozen input — retrieval and tools are not in the path. If prompt eval passes and agent eval fails, the prompt is not the bug.
+
+Minimum coverage:
+
+| Agent | Frozen input | Must hold |
+| ----- | ------------ | --------- |
+| `demo-single-agent` | Fake tool JSON: `ORD-5001` → DELAYED | Reply mentions DELAYED; does not invent carrier/amount |
+| `demo-rag-policy` | Refund-window chunk + citation metadata | States window from fixture; cites `refund-policy.md` + section heading |
+| `demo-rag-policy` | Loyalty courtesy chunk for `NW-SHIP-EXC-04` | Exception applies to `NW-HP-1001`; cites loyalty, not shipping |
+| `demo-dynamic-routing` | Coordinator instruction + refund query for `ORD-5001` | Transfer target is billing, not shipping |
+| `demo-hitl-approval` | Fake order JSON: amount 350, threshold 200 | Output requests approval; does not claim refund completed |
 
 ### What each layer tests (and what it does not)
 

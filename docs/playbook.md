@@ -92,80 +92,6 @@ Used by every scenario below so results are reproducible.
 
 
 
-
-## Model reliability, evaluation & prompt engineering
-
-`qwen2.5:7b` is the **default dev model** — free, local, good enough to exercise ADK wiring. It is **not** the quality bar for final prose, routing accuracy, or citation formatting. Evaluate flakiness by **layer**, not by "did the Playbook look good once."
-
-### How flakiness is evaluated (split graph from prose)
-
-
-| What you're testing                                                                                    | Layer               | Pass on qwen?                                                   | If it fails                                                               |
-| ------------------------------------------------------------------------------------------------------ | ------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Tools return seed data                                                                                 | 0                   | Must pass                                                       | Fix tool/repo — not a model issue                                         |
-| Retrieval ranking (hybrid trap, multi-doc)                                                             | 1                   | Must pass                                                       | Fix indexer/retriever — not a model issue                                 |
-| Reply wording **given frozen** tool JSON or chunks                                                     | 2                   | Should pass after prompt tuning                                 | Edit versioned prompt + eval fixture                                      |
-| Agent **called the right tools**, routed to the right specialist, paused for HITL, ran stages in order | 3 (event stream)    | Must pass (use `TestLlm` for §4 routing in CI if qwen is moody) | Fix graph/prompt — not a retrieval issue                                  |
-| Citation format, coordinator routing UX, apology tone                                                  | 4 (manual Playbook) | Best-effort on qwen                                             | See cloud-model fallbacks below — **not a regression** if Layers 0–3 pass |
-
-
-**Rule:** If Layer 3 passes but the Playbook answer "sounds wrong," treat it as **model capacity or prompt polish**, not a broken pipeline. Open Langfuse first: if tool spans and retrieval spans are correct, the infrastructure worked.
-
-### Do workflows and specialized agents improve reliability?
-
-**Yes — for structure, not for all reasoning.**
-
-
-| Pattern                             | What it fixes                                                                | What it does *not* fix                                                                           |
-| ----------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `SequentialAgent` / `ParallelAgent` | Fixed stage order; smaller prompt per stage; tools invoked by graph topology | Final synthesis prose; policy citation formatting                                                |
-| Coordinator + specialists (§4)      | Each specialist has one job and a short prompt vs one mega-prompt            | Coordinator **classification** (refund vs shipping vs account) — still one LLM decision          |
-| RAG tool + header chunks (§7)       | Facts come from retrieved text, not model memory                             | Model may still paraphrase badly or cite the wrong section if retrieval returned multiple chunks |
-| `LoopAgent` (§6)                    | Iterative tone/policy refinement                                             | Critique step quality on a 7B                                                                    |
-
-
-Specialized agents are the right POC design: they teach ADK composition **and** reduce per-call instruction load. They do not remove the need for Layer 3 event assertions or occasional cloud-model reruns for demo polish.
-
-### Prompt engineering techniques (used in this project)
-
-**POC topics**: Prompt management (versioned files; Layer 2 / D12 evals the wording). Proven end-to-end in §1.
-
-All prompts live in `src/main/resources/prompts/{agent}.v1.md`. Techniques to apply consistently:
-
-1. **One job per agent** — specialists say *what they do* and *what they never do* (e.g. billing never discusses shipment tracking).
-2. **Ground in tool/RAG output** — "Answer only from `tool_results` / `retrieved_chunks`; if missing, say you don't know."
-3. **Explicit citation template** — e.g. `Source: {source_path} — {section_heading}` so Layer 2 can regex-check format.
-4. **One–two few-shot examples** per specialist (short input → expected tool call or transfer).
-5. **Temperature 0** in eval (`@Tag("llm")`); **0–0.3** for manual demos.
-6. **Version prompts** — change prompt ⇒ update matching `.eval.json` ⇒ re-run Layer 2 before Layer 3.
-7. **Negative instructions sparingly** — prefer "use only tool JSON fields X, Y" over long "do not hallucinate" lists.
-
-
-
-### When to switch to Gemini or Anthropic (cloud model fallbacks)
-
-Use `llm.provider` switch in `application.yml` — no code change. Cloud models are for **demo polish and teaching comparison**, not daily CI (Layers 0–1 never need them; Layer 3 should pass on qwen or `TestLlm`).
-
-
-| Playbook | Agent                           | Stay on qwen for                               | Rerun with `gemini` or `anthropic` when                                                                                                 |
-| -------- | ------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| §1       | `demo-single-agent`             | Everyday dev; tool-calling smoke test          | Tool args wrong after prompt fix (rare)                                                                                                 |
-| §2       | `demo-sequential-investigation` | Layer 3 stage-order assertions                 | Final resolution prose is muddled but Langfuse shows all stages completed                                                               |
-| §3       | `demo-parallel-investigation`   | Parallel tool spans / fan-out                  | Aggregator omits fraud score despite correct tool JSON                                                                                  |
-| §4       | `demo-dynamic-routing`          | CI with `TestLlm`                              | **Manual demo:** coordinator routes to wrong specialist on 2+ of 3 queries                                                              |
-| §5       | `demo-hitl-approval`            | Always (confirmation is structural, not prose) | —                                                                                                                                       |
-| §6       | `demo-loop-refinement`          | Loop iteration count in Langfuse               | Refined apology still violates tone after `max_iterations`                                                                              |
-| §7       | `demo-rag-policy`               | §7.1 simple refund window                      | **§7.2** (multi-doc) or **§7.3** (hybrid codes): `RetrievalEvalTest` passes but answer cites wrong doc or omits `source_path` / section |
-| §7.4     | `demo-rag-policy`               | —                                              | Run on qwen first to **demo** hallucination guard (see Guardrails below)                                                                |
-| §8       | `demo-memory-personalization`   | Layer 3 memory-load events                     | Recalls wrong ticket/preference despite correct DB read in trace                                                                        |
-
-
-**Suggested demo flow:** build and debug on qwen → run Layers 0–3 → for a stakeholder demo, rerun **§4**, **§7.2–7.3**, and **§6** once on `gemini-2.0-flash` or `claude-3-7-sonnet` to show the same graph with better prose.
-
----
-
-
-
 ## 1. Single Agent + Tool Calling — `demo-single-agent`
 
 **POC topics:** Single Agent, Java Functions, Custom Tools, Prompt management, Short-Term Memory (conversation / session state / context window).
@@ -357,55 +283,10 @@ For any scenario above, open Langfuse and confirm:
 1. With `llm.provider=ollama` (default), rerun Scenario 1 — works against local qwen2.5:7b.
 2. Set `llm.provider=gemini` and a valid `GEMINI_API_KEY`, restart, rerun Scenario 1 — same behavior, different model backend, **no code change**.
 3. Repeat for `anthropic` / `openrouter` if you have those keys.
-4. For scenarios where qwen prose is weak but Langfuse shows correct tools/retrieval, rerun per the **cloud-model fallbacks** table above (especially §4, §6, §7.2–7.3).
-
-
+4. If qwen prose is weak but Langfuse shows correct tools/retrieval, see `spec.md` → Model Routing Config → Cloud-model fallbacks.
 
 ### Evaluation Harness — Architecture D12
 
 **POC topics:** Evaluation — Golden datasets, Prompt evaluation, Agent evaluation, Tool evaluation.
 
-Do **not** debug by editing a prompt in the Web UI and trying again. Tests are layered so a failure names the layer. Exact class names are finalized in `plan.md`.
-
-
-| Layer       | Command                                 | LLM?                     | What a pass means                                                                                                                                   |
-| ----------- | --------------------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0 Tool      | `mvn test -Dtest=ToolEvalTest`          | No                       | Seed lookups, fraud score, PII mask — exact values.                                                                                                 |
-| 1 Retrieval | `mvn test -Dtest=RetrievalEvalTest`     | No                       | Step 7.3 query: hybrid ranks the loyalty `NW-SHIP-EXC-04` chunk #1; dense-only does not. Step 7.2 query: chunks from both shipping and refund docs. |
-| 2 Prompt    | `mvn test -Dtest=PromptEvalTest`        | Yes, canned context only | Reply wording/citations given **fake** tool JSON or chunks. **Does not test tool execution.**                                                       |
-| 3 Agent     | `mvn test -Dtest=EvaluationHarnessTest` | Yes                      | **Event stream:** which tools ran, in what order, routing target, confirmation pause. Plus `must_contain` facts. One case per Playbook scenario.    |
-
-
-
-
-### When a Playbook step fails
-
-1. Open Langfuse.
-2. Run the **lowest** layer that could explain the trace:
-  - missing tool → Layer 0
-  - wrong chunk → Layer 1
-  - right context, wrong wording → Layer 2
-  - graph/routing → Layer 3
-3. Change prompts only after Layer 2 has a failing fixture, then make that fixture pass.
-
-
-
-### Prompt eval coverage (minimum)
-
-
-| Agent                  | Frozen input                                              | Must hold                                                                                                                        |
-| ---------------------- | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `demo-single-agent`    | **Fake** tool JSON: `ORD-5001` → DELAYED                  | Reply mentions DELAYED; does not invent carrier/amount. *(Does not test whether the real tool was invoked — that's Layer 3.)*    |
-| `demo-rag-policy`      | Refund-window chunk + citation metadata                   | States the window **from the fixture** and cites `refund-policy.md` + section heading.                                           |
-| `demo-rag-policy`      | Loyalty courtesy chunk for `NW-SHIP-EXC-04`               | Says the exception applies to `NW-HP-1001`; cites loyalty, not shipping.                                                         |
-| `demo-dynamic-routing` | Coordinator instruction + "I want a refund for ORD-5001." | Transfer/delegate target is billing, not shipping.                                                                               |
-| `demo-hitl-approval`   | **Fake** order JSON: amount 350, threshold 200            | Model output requests approval; does not claim refund completed. *(Real confirmation flow tested in Layer 3 via Runner events.)* |
-
-
-
-
-### Workflow tests (Layer 3)
-
-Use `InMemoryRunner` and inspect events — e.g. sequential stages in order, parallel tools without strict sequencing, `transfer` to billing vs shipping, confirmation before refund. See `spec.md` → Testing Strategy → Workflow testing.
-
-Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — [adk-java#300](https://github.com/google/adk-java/issues/300)). Teams use JUnit + `InMemoryRunner` + event assertions instead; golden JSON mirrors Python eval-set fields for a future runner swap.
+Run layered tests via `mvn test` (Layers 0–3). Do not debug by editing prompts in the Web UI. See `spec.md` → Testing Strategy for commands, pass criteria, prompt-eval fixtures, and workflow event assertions.
