@@ -4,14 +4,16 @@ Status: **APPROVED**
 
 ## Purpose
 
-This is the manual test script for every feature built in this project. For each scenario below: pick the named agent in the ADK Web UI dropdown, type the exact query, and check the response against the stated expectations. Each scenario names the **Architecture diagram** (to be produced in `architecture.md`, diagram IDs fixed here so both docs stay in sync) that shows *why* the runtime behaves that way.
+This is the manual test script for every feature built in this project. For each scenario below: pick the named agent in the ADK Web UI dropdown, type the exact query, and check the response against the stated expectations.
+
+**Traceability is inline** (POC topic → this section → Architecture diagram). Each scenario lists the **POC topics** it proves (from `Google ADK Java POC.md`) and the **Architecture** diagram IDs (produced in `architecture.md`; IDs fixed here so both docs stay in sync). Start with **D0** for the whole-system view; the per-scenario IDs show *why* that query’s runtime behaves that way. There is no separate mapping table.
 
 **Architecture diagrams this Playbook will reference** (built next, names fixed now so cross-references don't drift):
 
 
 | ID  | Diagram                                                           |
 | --- | ----------------------------------------------------------------- |
-| D0  | High-Level System Architecture                                    |
+| D0  | High-Level System Architecture (POC topic: Architecture)          |
 | D1  | Single Agent + Tool Call runtime path                             |
 | D2  | Sequential Workflow runtime path (investigation pipeline)         |
 | D3  | Parallel Workflow runtime path (fan-out/fan-in investigation)     |
@@ -86,6 +88,8 @@ Specialized agents are the right POC design: they teach ADK composition **and** 
 
 ### Prompt engineering techniques (used in this project)
 
+**POC topics**: Prompt management (versioned files; Layer 2 / D12 evals the wording). Proven end-to-end in §1.
+
 All prompts live in `src/main/resources/prompts/{agent}.v1.md`. Techniques to apply consistently:
 
 1. **One job per agent** — specialists say *what they do* and *what they never do* (e.g. billing never discusses shipment tracking).
@@ -118,7 +122,7 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 ## 1. Single Agent + Tool Calling — `demo-single-agent`
 
-**Covers**: Single Agent pattern, Java Function Tools, Prompt management, Short-Term Memory (session state / context window). **Architecture**: D1, D8 (short-term memory portion), D9, D10.
+**POC topics**: Single Agent, Java Functions, Custom Tools, Prompt management, Short-Term Memory (conversation / session state / context window). **Architecture**: D1, D8 (short-term portion), D9, D10.
 
 
 | Step | Query                                    | Expected                                                                                                                                                                                          |
@@ -131,7 +135,7 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 ## 2. Sequential Workflow — `demo-sequential-investigation`
 
-**Covers**: `SequentialAgent`, agent composition via `outputKey` chaining, database tool calls, Retry & error recovery. **Architecture**: D2, D9, D10.
+**POC topics**: Sequential workflow, Multi-Agent, Agent composition, Database Tool, Retry & error recovery (non-HITL / not-found). **Architecture**: D2, D9, D10.
 
 
 | Step | Query                                                       | Expected                                                                                                                                                                                                                                                                                                                     |
@@ -142,7 +146,7 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 ## 3. Parallel Workflow — `demo-parallel-investigation`
 
-**Covers**: `ParallelAgent` fan-out/fan-in, independent-task efficiency. **Architecture**: D3, D9, D10.
+**POC topics**: Parallel workflow, Multi-Agent (fan-out/fan-in). **Architecture**: D3, D9, D10.
 
 
 | Step | Query                                                 | Expected                                                                                                                                                                                                                                                                                               |
@@ -154,7 +158,7 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 ## 4. Dynamic Routing / Coordinator–Specialist — `demo-dynamic-routing`
 
-**Covers**: Coordinator agent, specialist delegation, dynamic routing, conditional branching, nested workflows. **Architecture**: D4, D9, D10.
+**POC topics**: Dynamic routing, Coordinator Agent, Specialist Agents, Agent delegation, Conditional branching, Nested workflows, Multi-Agent. **Architecture**: D4, D9, D10.
 
 
 | Step | Query                                    | Expected                                                                                                                                                       |
@@ -168,7 +172,7 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 ## 5. Human-in-the-Loop — `demo-hitl-approval`
 
-**Covers**: `ToolConfirmation` (human approval dialog in Dev UI), error recovery on reject. **Architecture**: D5, D9, D10.
+**POC topics**: Human-in-the-loop, Retry & error recovery (approve / reject paths). **Architecture**: D5, D9, D10.
 
 > **Live demo:** When the refund exceeds the threshold, the ADK Web UI shows an **approval dialog** — click Approve or Reject ([ToolConfirmation docs](https://adk.dev/tools-custom/confirmation/)). No Postman. Automated tests use `InMemoryRunner` and inject the confirmation `FunctionResponse` in code.
 
@@ -184,7 +188,7 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 ## 6. Loop Agent Refinement — `demo-loop-refinement`
 
-**Covers**: `LoopAgent`, generate→review→refine cycle, `max_iterations` safeguard. **Architecture**: D6, D9, D10.
+**POC topics**: Loop workflow (spec-implied `LoopAgent`; not a named heading in `Google ADK Java POC.md`), iterative self-correction. **Architecture**: D6, D9, D10.
 
 
 | Step | Query                                                                                                         | Expected                                                                                                                                                                                                                 |
@@ -195,7 +199,7 @@ Use `llm.provider` switch in `application.yml` — no code change. Cloud models 
 
 ## 7. RAG Policy Q&A — `demo-rag-policy`
 
-**Covers**: Retrieval, embeddings, vector store, **header-aware chunking**, **hybrid (dense + lexical + RRF) search**, context injection, citation. **Architecture**: D7, D9, D10.
+**POC topics**: RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation), Semantic Memory (facts / business rules / policy knowledge). **Architecture**: D7, D8 (semantic portion), D9, D10.
 
 Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-token overlap on oversized sections, cite via `source_path` + `section_heading`.
 
@@ -212,7 +216,7 @@ Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-
 
 ## 8. Memory Personalization — `demo-memory-personalization`
 
-**Covers**: Long-term memory (preferences, cross-session recall), Episodic memory (past interactions). **Architecture**: D8, D9, D10.
+**POC topics**: Long-Term Memory (preferences, cross-session recall), Episodic Memory (past interactions). Short-term is §1; semantic is §7; D8 is the memory comparison / data-flow diagram for all four types. **Architecture**: D8, D9, D10.
 
 
 | Step | Query                                                                                                                 | Expected                                                                                                                                                                                                                                                                           |
@@ -224,6 +228,8 @@ Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-
 ## Cross-Cutting Verification (run against any agent above, not a separate demo)
 
 ### Guardrails — Architecture D9
+
+**POC topics**: Input guardrails, Output guardrails, Safety filters, Prompt injection protection, Jailbreak protection, Content moderation, PII masking, Hallucination mitigation.
 
 **Scope in this POC:** Input guardrails (injection/jailbreak heuristics) and PII masking are **real, deterministic** checks. Output "hallucination" mitigation is **not** a second LLM judging the first — it is (a) RAG grounding, (b) heuristic flags logged to H2, and (c) **you** comparing the answer to source docs in the Playbook.
 
@@ -238,9 +244,13 @@ Chunking contract (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-
 
 ### Observability — Architecture D10
 
+**POC topics**: Execution traces, Agent events, Tool execution, Token usage, Latency, Errors, Cost monitoring, Logs, Metrics; integrations OpenTelemetry, Langfuse.
+
 For any scenario above, open Langfuse and confirm: one trace per conversational turn; child spans for each tool call and model call; token usage + latency populated; if a tool errors, the span shows error status rather than silently succeeding.
 
 ### Model Routing — Architecture D11
+
+**POC topics**: Model configuration (provider switch, no code change).
 
 1. With `llm.provider=ollama` (default), rerun Scenario 1 — works against local qwen2.5:7b.
 2. Set `llm.provider=gemini` (and a valid `GEMINI_API_KEY`), restart, rerun Scenario 1 — same behavior, different model backend, **no code change**.
@@ -248,6 +258,8 @@ For any scenario above, open Langfuse and confirm: one trace per conversational 
 4. For scenarios where qwen prose is weak but Langfuse shows correct tools/retrieval, rerun per the **cloud-model fallbacks** table in [Model reliability, evaluation & prompt engineering](#model-reliability-evaluation--prompt-engineering) (especially §4, §6, §7.2–7.3).
 
 ### Evaluation Harness — Architecture D12
+
+**POC topics**: Evaluation — Golden datasets, Prompt evaluation, Agent evaluation, Tool evaluation.
 
 Do **not** debug by editing a prompt in the Web UI and trying again. Tests are layered so a failure names the layer. Exact class names are finalized in `plan.md`.
 
@@ -277,25 +289,4 @@ If a Playbook step fails in the UI: open Langfuse, then run the **lowest** layer
 **Workflow tests (Layer 3)** use `InMemoryRunner` and inspect events — e.g. sequential stages in order, parallel tools without strict sequencing, `transfer` to billing vs shipping, confirmation before refund. See `spec.md` → Testing Strategy → Workflow testing.
 
 Java ADK's Web UI Eval tab is **out of scope** (eval REST is unimplemented — [adk-java#300](https://github.com/google/adk-java/issues/300)). Teams use JUnit + `InMemoryRunner` + event assertions instead; golden JSON mirrors Python eval-set fields for a future runner swap.
-
-## Traceability: POC topic → Playbook section → Architecture diagram
-
-
-| POC topic (`Google ADK Java POC.md`)                                                               | Playbook section                                | Architecture diagram |
-| -------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------- |
-| Architecture, Model configuration, Prompt management                                               | §1, Model Routing, Evaluation Harness (Layer 2) | D1, D11, D12         |
-| Sequential workflow                                                                                | §2                                              | D2                   |
-| Parallel workflow                                                                                  | §3                                              | D3                   |
-| Dynamic routing, Coordinator/Specialist, Agent delegation, Conditional branching, Nested workflows | §4                                              | D4                   |
-| Human-in-the-loop, Retry & error recovery                                                          | §5 (and §2 step 2 for non-HITL error recovery)  | D5, D2               |
-| Single Agent, Multi-Agent, Agent composition                                                       | §1, §2–§4                                       | D1–D4                |
-| Java Functions, Database Tool, Custom Tools                                                        | §1–§3 (tools exercised throughout)              | D1, D2               |
-| Short-Term Memory                                                                                  | §1 step 2                                       | D8                   |
-| Long-Term Memory, Episodic Memory                                                                  | §8                                              | D8                   |
-| Semantic Memory                                                                                    | §7 (policy facts also serve as semantic memory) | D7, D8               |
-| RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation)              | §7 (step 3 is hybrid; step 2 is multi-document) | D7                   |
-| Guardrails (all sub-topics)                                                                        | Cross-Cutting: Guardrails                       | D9                   |
-| Observability (OTel, Langfuse)                                                                     | Cross-Cutting: Observability                    | D10                  |
-| Evaluation (golden datasets, prompt / agent / tool eval)                                           | Cross-Cutting: Evaluation Harness (Layers 0–3)  | D12                  |
-
 
