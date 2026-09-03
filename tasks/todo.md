@@ -11,11 +11,10 @@ Focused tests (indicative names from `docs/spec.md`; Task 20 records the real cl
 - Layer 2: `mvn test -Dtest=PromptEvalTest`
 - Layer 3: `mvn test -Dtest=EvaluationHarnessTest`
 
-Run (from `docs/spec.md`):
+Run (see [`README.md`](../README.md)):
 
 ```bash
-mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
-  -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"
+mvn compile exec:java
 ```
 
 ---
@@ -27,14 +26,14 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 **Description:** Move field-level H2 DDL out of architecture prose into executable SQL so Playbook fixtures have one contract. Keep the ER diagram in architecture. Seed must make every Playbook §1–8 assertion true without a Java seeder.
 
 **Acceptance criteria:**
-- [ ] `src/main/resources/schema.sql` creates all nine tables from architecture §4.1 with FKs; allowed values from architecture §4.1 / Playbook (CHECK or VARCHAR + comment)
-- [ ] `src/main/resources/data.sql` inserts the reviewed seed from `tasks/plan.md`; `ORD-9999` is absent
-- [ ] `docs/architecture.md` §4.1 keeps the ER diagram, drops duplicated column lists, and links to both SQL files
+- [x] `src/main/resources/schema.sql` creates all nine tables from architecture §4.1 with FKs; allowed values from architecture §4.1 / Playbook (CHECK or VARCHAR + comment)
+- [x] `src/main/resources/data.sql` inserts the reviewed seed from `tasks/plan.md`; `ORD-9999` is absent
+- [x] `docs/architecture.md` §4.1 keeps the ER diagram, drops duplicated column lists, and links to both SQL files
 
 **Verification:**
-- [ ] Tests pass: none yet (no app)
-- [ ] Build succeeds: n/a
-- [ ] Manual check: every Playbook canonical ID is in `data.sql`; related invented rows match `tasks/plan.md` Proposed seed; human has reviewed before Task 5
+- [x] Tests pass: none yet (no app)
+- [x] Build succeeds: n/a
+- [x] Manual check: every Playbook canonical ID is in `data.sql`; related invented rows match `tasks/plan.md` Proposed seed; human has reviewed before Task 5
 
 **Dependencies:** None
 
@@ -51,14 +50,14 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 **Description:** Source-driven confirmation of create-session REST for initial `{"customer_id":"CUST-1001"}`, whether Dev UI can set state, and whether `bind_customer` is required. Unlocks Playbook §8, personalization, and Layer 3 memory assertions.
 
 **Acceptance criteria:**
-- [ ] Exact create-session path, JSON field names, `appName` / `userId` convention, and a copy-pasteable curl are recorded in `tasks/plan.md` → Spike findings
-- [ ] Yes/no: Dev UI can set initial session state; yes/no: `bind_customer` required (if yes, tool contract written for Task 19)
-- [ ] `docs/spec.md` and `docs/playbook.md` placeholders for the session endpoint are replaced with the 1.9.0 facts (not 1.6/1.7 Javadoc)
+- [x] Exact create-session path, JSON field names, `appName` / `userId` convention, and a copy-pasteable curl are recorded in `tasks/plan.md` → Spike findings
+- [x] Yes/no: Dev UI can set initial session state; yes/no: `bind_customer` required (if yes, tool contract written for Task 19)
+- [x] `docs/spec.md` and `docs/playbook.md` placeholders for the session endpoint are replaced with the 1.9.0 facts (not 1.6/1.7 Javadoc)
 
 **Verification:**
-- [ ] Tests pass: n/a (research task)
-- [ ] Build succeeds: n/a until Task 3
-- [ ] Manual check: citations are `google-adk-dev` **1.9.0** `SessionController` / `SessionRequest` (and Dev UI source or docs). After Task 3: live POST then GET proves state stuck
+- [x] Tests pass: n/a (research task)
+- [x] Build succeeds: n/a until Task 3
+- [x] Manual check: citations are `google-adk-dev` **1.9.0** `SessionController` / `SessionRequest` (and Dev UI source or docs). Live POST then GET on `stub-agent` proves `customer_id` stuck (verified 2026-09-03; see `README.md`)
 
 **Dependencies:** None for reading; live check depends on Task 3
 
@@ -74,14 +73,14 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 **Description:** Skeleton so later tasks have a real exec command and package layout. One stub `ROOT_AGENT` only — no tools, no JPA. SQL files from Task 1 may sit unused until Task 5.
 
 **Acceptance criteria:**
-- [ ] `pom.xml` pins Java 25, `google-adk` + `google-adk-dev` 1.9.0, `exec-maven-plugin` → `com.poc.adk.SupportAssistantApplication`
-- [ ] `SupportAssistantApplication` uses `scanBasePackages = {"com.poc.adk", "com.google.adk.web"}`; one class exposes `public static final BaseAgent ROOT_AGENT`
-- [ ] Effective Spring Boot version is recorded (expected 4.0.2; do not override; stop and ask if different); Dev UI dropdown shows the stub; no bean-name collision
+- [x] `pom.xml` pins Java 25, `google-adk` + `google-adk-dev` 1.9.0, `exec-maven-plugin` → `com.poc.adk.SupportAssistantApplication`
+- [x] `SupportAssistantApplication` uses `scanBasePackages = {"com.poc.adk", "com.google.adk.web"}`; one class exposes `public static final BaseAgent ROOT_AGENT`
+- [x] Effective Spring Boot version is recorded (expected 4.0.2; do not override; stop and ask if different); Dev UI dropdown shows the stub; no bean-name collision
 
 **Verification:**
-- [ ] Tests pass: none required
-- [ ] Build succeeds: `mvn -q compile` and `mvn -q dependency:tree -Dincludes=org.springframework.boot`
-- [ ] Manual check: `mvn compile exec:java` with `--adk.agents.source-dir=target/classes --server.port=8000`; open `http://localhost:8000`; dropdown populated; logs have no `ConflictingBeanDefinitionException`
+- [x] Tests pass: none required
+- [x] Build succeeds: `mvn -q compile` and `mvn -q dependency:tree -Dincludes=org.springframework.boot`
+- [x] Manual check: `mvn compile exec:java` with `--adk.agents.source-dir=target --server.port=8000`; open `http://localhost:8000`; dropdown populated; logs have no `ConflictingBeanDefinitionException`
 
 **Dependencies:** None
 
@@ -95,9 +94,9 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 
 ## Checkpoint: After Tasks 1-3
 
-- [ ] Seed reviewed against Playbook IDs
-- [ ] Spike findings section in `tasks/plan.md` filled (live POST may wait until stub is up)
-- [ ] Stub boots, dropdown works, Boot version known
+- [x] Seed reviewed against Playbook IDs
+- [x] Spike findings section in `tasks/plan.md` filled; live POST/GET verified on `stub-agent` (2026-09-03)
+- [x] Stub boots, dropdown works, Boot version known
 - [ ] Review with human before proceeding
 
 ---

@@ -14,7 +14,7 @@ Sources of truth for this plan: approved spec / architecture / playbook, plus th
 - **Module build order follows `spec.md`.** Do not reorder. Each `demo-*` agent is one Playbook scenario — that is this POC’s vertical slice (ADK Web UI is the only interaction surface).
 - **Session identity for Playbook §8** is initial `session.state.customer_id` at session create. Exact REST path/body, Dev UI state support, and whether `bind_customer` is needed are confirmed in Task 2 against `google-adk-dev` **1.9.0** (not older Javadoc). `bind_customer` is not built unless that spike says Dev UI cannot set state; if needed it lands in Task 19, not bootstrap.
 - **Do not declare** beans named `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter`.
-- **Plan-phase pins (Architecture §9):** `google-adk` / `google-adk-dev` **1.9.0**, `java.version` **25**, Qdrant image **≥ 1.15.2**, Langfuse **≥ v3.22.0**. Confirm effective Spring Boot (expected **4.0.2**, do not override) after Task 3 via `mvn -q dependency:tree -Dincludes=org.springframework.boot`. If it is not 4.0.2, stop and ask.
+- **Plan-phase pins (Architecture §9):** `google-adk` / `google-adk-dev` **1.9.0**, `java.version` **25**, Qdrant image **≥ 1.15.2**, Langfuse **≥ v3.22.0**. **Effective Spring Boot (Task 3):** **4.0.2** via `google-adk-dev` (confirmed with `mvn dependency:tree -Dincludes=org.springframework.boot`; do not override). `CompiledAgentLoader` requires `--adk.agents.source-dir=target` (the Maven `target/` dir). Passing `target/classes` treats package roots (`com/`) as agent units and finds **0** agents.
 - **Hybrid retrieval** is BM25 sparse (`qdrant/bm25`) + nomic dense (768-d) fused with RRF `k=60`. Semantic memory is `policy_chunks` only. Long-term memory is H2 `CustomerPreference`.
 - **Later implementation skills (not this session):** `source-driven-development` for every ADK/Qdrant/Langfuse API; `incremental-implementation` + `test-driven-development` per task; `browser-testing-with-devtools` for Dev UI checks; standing bar is `.cursor/references/definition-of-done.md`.
 
@@ -62,17 +62,16 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 
 ### Phase 0: Unblock
 
-- [ ] Task 1: Canonical H2 `schema.sql` + `data.sql`; architecture ER points at SQL
-- [ ] Task 2: ADK 1.9.0 session spike
-- [ ] Task 3: Minimal bootstrap (pom + `SupportAssistantApplication` + one stub `ROOT_AGENT`)
+- [x] Task 1: Canonical H2 `schema.sql` + `data.sql`; architecture ER points at SQL
+- [x] Task 2: ADK 1.9.0 session spike
+- [x] Task 3: Minimal bootstrap (pom + `SupportAssistantApplication` + one stub `ROOT_AGENT`)
 
 ### Checkpoint: After Tasks 1–3
 
-- [ ] Seed reviewed against Playbook IDs
-- [ ] Spike curl written (live POST after Task 3)
-- [ ] Stub boots; dropdown loads; no bean collisions; effective Boot version known
+- [x] Seed reviewed against Playbook IDs
+- [x] Spike curl written; live POST/GET verified on `stub-agent` (2026-09-03)
+- [x] Stub boots; dropdown loads; no bean collisions; effective Boot version known
 - [ ] Review with human before Phase 1
-
 ### Phase 1: Shared infrastructure
 
 - [ ] Task 4: Docker Compose (Qdrant ≥ 1.15.2, Langfuse ≥ v3.22.0)
@@ -139,20 +138,36 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 
 ## Open Questions
 
-- Exact `appName` and `userId` for the create-session curl — Task 2
-- Whether Dev UI can set initial session state — Task 2
-- Whether `bind_customer` is required — Task 2 (default: no)
-- `ORD-5002` product/amount invented above — change in Task 1 if a different fixture is preferred
+- ~~Exact `appName` and `userId` for the create-session curl — Task 2~~ → resolved in Spike findings (`appName` = agent `name()`, `userId` = `playbook-user`)
+- ~~Whether Dev UI can set initial session state — Task 2~~ → yes (Update state → `stateDelta`)
+- ~~Whether `bind_customer` is required — Task 2~~ → no
+- `ORD-5002` product/amount invented in Proposed seed — change in Task 1 if a different fixture is preferred (kept as Smart Watch / 249.00)
 
 ## Spike findings (fill in Task 2)
 
-- Create-session path:
-- Request body (JSON field names):
-- Copy-paste curl for `CUST-1001`:
-- `appName` / `userId` convention:
-- Dev UI can set initial state: yes / no
-- `bind_customer` required: yes / no
-- 1.9.0 sources cited:
+- **Create-session path:** `POST /apps/{appName}/users/{userId}/sessions` (service-generated id). Alternate: `POST /apps/{appName}/users/{userId}/sessions/{sessionId}` when the client supplies the id.
+- **Request body (JSON field names):** optional `SessionRequest` with a single field `state` (map). Example: `{"state":{"customer_id":"CUST-1001"}}`. Omitting the body (or `state: null`) yields empty initial state.
+- **Copy-paste curl for `CUST-1001`:**
+
+```bash
+# appName must equal the selected agent's BaseAgent.name() (Dev UI dropdown value).
+# After Task 3 stub: stub-agent. For Playbook §8: demo-memory-personalization (once Task 19 lands).
+curl -s -X POST "http://localhost:8000/apps/stub-agent/users/playbook-user/sessions" \
+  -H "Content-Type: application/json" \
+  -d '{"state":{"customer_id":"CUST-1001"}}'
+
+# Prove state stuck (after Task 3 boot): replace SESSION_ID from the create response.
+curl -s "http://localhost:8000/apps/stub-agent/users/playbook-user/sessions/SESSION_ID"
+```
+
+- **`appName` / `userId` convention:** `appName` = `ROOT_AGENT.name()` as registered by `CompiledAgentLoader` (same string as the Dev UI agent dropdown). `userId` is an opaque path segment; Playbook demos use `playbook-user`.
+- **Dev UI can set initial state: yes** — not via New Session create (that posts empty/`__session_metadata__` only). Use **More options → Update state**, edit JSON (e.g. `{"customer_id":"CUST-1001"}`), then send the first message; Dev UI applies it as `stateDelta` on `/run` / `/run_sse`. Prefer the REST create-session curl above for Playbook §8 reproducibility.
+- **`bind_customer` required: no** — REST create with `state.customer_id` and/or Dev UI Update state are sufficient. No tool contract for Task 19.
+- **1.9.0 sources cited:**
+  - [`SessionController.java` @ v1.9.0](https://github.com/google/adk-java/blob/v1.9.0/dev/src/main/java/com/google/adk/web/controller/SessionController.java) — `@PostMapping("/apps/{appName}/users/{userId}/sessions")`, `@GetMapping(".../sessions/{sessionId}")`
+  - [`SessionRequest.java` @ v1.9.0](https://github.com/google/adk-java/blob/v1.9.0/dev/src/main/java/com/google/adk/web/dto/SessionRequest.java) — `@JsonProperty("state")`
+  - Dev UI `dev/browser/main-*.js` @ v1.9.0 — `createSession(userId, appName, state?)`; `updateState()` dialog → `updatedSessionState` → `stateDelta` on run
+- **Live verification (Tasks 2 + 3):** 2026-09-03 — booted `stub-agent`; `POST /apps/stub-agent/users/playbook-user/sessions` with `{"state":{"customer_id":"CUST-1001"}}`; `GET .../sessions/{id}` returned the same `customer_id`. Recorded in [`README.md`](../README.md).
 
 ## Standing Definition of Done
 

@@ -121,7 +121,7 @@ public class SupportAssistantApplication {
 
 ```bash
 mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
-  -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"
+  -Dexec.args="--adk.agents.source-dir=target --server.port=8000"
 ```
 
 - **Agent loading** — default `CompiledAgentLoader` scans `--adk.agents.source-dir` for `public static final BaseAgent ROOT_AGENT` on each `demo-*` class.
@@ -148,18 +148,18 @@ Long-term personalization does **not** infer customer from chat text in Playbook
 2. **Memory tools** — `CustomerPreferenceTool` reads `customer_id` from session state (via `ToolContext`), not from the user message.
 3. **Change customer** — create a **new session** with a different `customer_id` (same pattern as logging in as another user). Do not switch mid-session for Playbook demos.
 
-**Manual (Playbook §8):** exact REST path and body are confirmed in the Plan-phase ADK session spike (`plan.md`). Indicative pattern:
+**Manual (Playbook §8):** create the session with initial state via REST (confirmed against `google-adk-dev` **1.9.0** `SessionController` / `SessionRequest` — see `tasks/plan.md` → Spike findings):
 
 ```bash
-# 1. Create session for Priya (exact URL from spike)
-curl -s -X POST "http://localhost:8000/<session-endpoint-from-spike>" \
+# 1. Create session for Priya (appName = selected agent's name() / Dev UI dropdown)
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
   -H "Content-Type: application/json" \
   -d '{"state": {"customer_id": "CUST-1001"}}'
 
-# 2. Send §8.1 query on the returned session_id via /run or /run_sse
+# 2. Send §8.1 query on the returned session id via /run or /run_sse
 ```
 
-**Web UI:** if the Dev UI cannot set initial state, use REST for §8 or the fallback `bind_customer(customer_id)` tool documented in `plan.md` after the spike.
+**Web UI:** New Session does not accept custom initial state. Use **More options → Update state** to set `{"customer_id":"CUST-1001"}` before the first message (applied as `stateDelta`), or use the REST curl above. `bind_customer` is **not** required (Task 2 spike).
 
 **Layer 3 tests:** `InMemoryRunner` sets the same initial state programmatically — no special-case agent code.
 
@@ -466,7 +466,7 @@ data/           → H2 file-mode database (gitignored)
 ### Checklist
 
 - Every topic listed in `Google ADK Java POC.md` maps to at least one module in the Capability Map and has a corresponding Playbook entry
-- `mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication -Dexec.args="--adk.agents.source-dir=target/classes"` starts the app and lists all `demo-*` agents in the Web UI
+- `mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication -Dexec.args="--adk.agents.source-dir=target"` starts the app and lists all `demo-*` agents in the Web UI
 - Each Playbook scenario, run manually against the Web UI/REST API with the default `qwen2.5:7b`/Ollama provider, produces the documented behavior
 - Switching `llm.provider` to `gemini` / `anthropic` / `openrouter` (with a valid key) works with no code change
 - Langfuse shows traces for agent/tool/model calls; Qdrant holds `policy_chunks`; H2 holds seeded domain + memory data

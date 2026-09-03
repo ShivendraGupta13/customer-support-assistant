@@ -60,7 +60,7 @@ docker compose -f docker/docker-compose.yml up -d
 ```bash
 mvn compile exec:java \
   -Dexec.mainClass="com.poc.adk.SupportAssistantApplication" \
-  -Dexec.args="--adk.agents.source-dir=target/classes --server.port=8000"
+  -Dexec.args="--adk.agents.source-dir=target --server.port=8000"
 ```
 
 `SupportAssistantApplication` is the `@SpringBootApplication` (scanning `com.poc.adk` and `com.google.adk.web`), so it boots the Dev UI directly — no `AdkWebServer.start(...)` call.
@@ -80,11 +80,11 @@ Long-term personalization uses `customer_id` in **initial `session.state`** at s
 | Run as Alex | **Another** new session with `{"customer_id": "CUST-1002"}` |
 | Change customer | New session (do not switch mid-session) |
 
-Exact REST path: `plan.md` ADK session spike (indicative pattern in `spec.md` → Memory → Session identity). Send §8 queries on the returned `session_id` via `/run` or `/run_sse`. If the Web UI cannot set initial state, use REST for §8.
+Exact REST path (ADK **1.9.0**): `POST /apps/{appName}/users/{userId}/sessions` with body `{"state":{"customer_id":"CUST-1001"}}`. Copy-paste curls and `appName`/`userId` convention: `tasks/plan.md` → Spike findings. Send §8 queries on the returned session id via `/run` or `/run_sse`. Dev UI: **More options → Update state** (or REST); `bind_customer` is not required.
 
 ### Canonical seed data
 
-Used by every scenario below so results are reproducible.
+Used by every scenario below so results are reproducible. Full insert rows live in [`src/main/resources/data.sql`](../src/main/resources/data.sql); the table below is the human-readable index.
 
 
 | Entity             | Id                                                                               | Key facts                                                                                                                                                         |

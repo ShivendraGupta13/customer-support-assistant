@@ -65,7 +65,7 @@ flowchart LR
 2. Our `@Configuration` classes build: JPA/H2, `QdrantClient` (gRPC, `:6334`), the `OpenTelemetrySdk` (OTLP/HTTP exporter → Langfuse), and `ModelFactory`.
 3. An `ApplicationRunner` (`AppServicesInitializer`) copies those beans into a static `AppServices` holder so agent classes can use them (they are not Spring beans — see below). H2 business rows come from `schema.sql` + `data.sql`, not from this runner. After RAG exists, the same runner embeds policy markdown into Qdrant if the collection is empty.
 4. `AdkWebServer`'s own auto-configuration registers its beans (`sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter` — all `InMemory*` by default) [[2]](#references).
-5. `CompiledAgentLoader` (`@Service("agentLoader")`, active by default via `@ConditionalOnProperty(matchIfMissing=true)`) scans `--adk.agents.source-dir=target/classes` for classes exposing `public static final BaseAgent ROOT_AGENT`, and registers one entry per `demo-*` agent in the Web UI dropdown [[3]](#references).
+5. `CompiledAgentLoader` (`@Service("agentLoader")`, active by default via `@ConditionalOnProperty(matchIfMissing=true)`) scans `--adk.agents.source-dir=target` for classes exposing `public static final BaseAgent ROOT_AGENT`, and registers one entry per `demo-*` agent in the Web UI dropdown [[3]](#references). Pass `target` (Maven build output root), not `target/classes` — the latter treats package folders as agent units and finds none.
 
 Step 3 must complete before step 5 can serve a request: agent classes are loaded reflectively by class-path scanning, not instantiated by Spring, so they are never `@Autowired` — they reach JPA repositories, the `QdrantClient`, and the OTel `Tracer` exclusively through the static `AppServices` holder.
 
@@ -149,21 +149,7 @@ No client-side BM25 tokenizer. Qdrant generates sparse BM25 vectors from raw tex
 
 ### 4.1 H2 schema
 
-Field-level schema was explicitly left to Architecture in `spec.md`. Enum values are taken from the canonical seed data in `playbook.md`.
-
-| Column / table | Allowed values |
-|---|---|
-| `CUSTOMER.loyalty_tier` | `SILVER`, `GOLD` |
-| `ORDER.status` | `PLACED`, `DELAYED`, `DELIVERED`, `REFUND_REQUESTED`, … |
-| `PAYMENT.status` | `CAPTURED`, `REFUNDED`, `PENDING` |
-| `SHIPMENT.status` | `IN_TRANSIT`, `IN_TRANSIT_DELAYED`, `DELIVERED` |
-| `TICKET.category` | `shipping_delay`, `refund`, `fraud`, `account` |
-| `TICKET.status` | `OPEN`, `RESOLVED` |
-| `CUSTOMER_PREFERENCE.preferred_contact_channel` | `EMAIL`, `SMS`, `PHONE` |
-| `GUARDRAIL_AUDIT_LOG.direction` | `INPUT`, `OUTPUT` |
-| `GUARDRAIL_AUDIT_LOG.action` | `BLOCKED`, `MASKED`, `ALLOWED` |
-
-`GUARDRAIL_AUDIT_LOG` and `EVALUATION_RUN` are standalone logs (no FK).
+Executable contract (DDL + seed): [`src/main/resources/schema.sql`](../src/main/resources/schema.sql) and [`src/main/resources/data.sql`](../src/main/resources/data.sql). Column types, FKs, and allowed-value CHECKs live only in those files — do not duplicate them here. `GUARDRAIL_AUDIT_LOG` and `EVALUATION_RUN` are standalone logs (no FK); seed leaves both empty. `ORD-9999` is never seeded.
 
 ```mermaid
 erDiagram
@@ -459,15 +445,15 @@ Long-term personalization binds **one customer per session** via initial `sessio
 | Tool path | `CustomerPreferenceTool` reads `customer_id` from `ToolContext` / session state |
 | Change customer | **New session** with a different `customer_id` |
 
-Exact REST path for session creation is confirmed in `plan.md` (ADK 1.9.x session spike). Indicative:
+Exact REST path (ADK **1.9.0** `SessionController`): see `tasks/plan.md` → Spike findings.
 
 ```bash
-curl -s -X POST "http://localhost:8000/<session-endpoint-from-spike>" \
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
   -H "Content-Type: application/json" \
   -d '{"state": {"customer_id": "CUST-1001"}}'
 ```
 
-Layer 3: `InMemoryRunner` sets the same initial state. If the Web UI cannot set state, §8 uses REST or a fallback `bind_customer` tool (plan spike).
+Layer 3: `InMemoryRunner` sets the same initial state. Dev UI can set state via **Update state** (`stateDelta` on next run); `bind_customer` is not required.
 
 ```mermaid
 flowchart LR

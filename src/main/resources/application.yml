@@ -1,0 +1,6 @@
+server:
+  port: 8000
+
+adk:
+  agents:
+    source-dir: target
