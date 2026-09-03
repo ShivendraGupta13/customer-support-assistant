@@ -63,7 +63,7 @@ flowchart LR
 
 1. `main()` → `SpringApplication.run` starts our context.
 2. Our `@Configuration` classes build: JPA/H2, `QdrantClient` (gRPC, `:6334`), the `OpenTelemetrySdk` (OTLP/HTTP exporter → Langfuse), and `ModelFactory`.
-3. An `ApplicationRunner` (`AppServicesInitializer`) publishes references to all of the above into a static `AppServices` holder, and seeds H2 + embeds policy documents into Qdrant if not already present.
+3. An `ApplicationRunner` (`AppServicesInitializer`) copies those beans into a static `AppServices` holder so agent classes can use them (they are not Spring beans — see below). H2 business rows come from `schema.sql` + `data.sql`, not from this runner. After RAG exists, the same runner embeds policy markdown into Qdrant if the collection is empty.
 4. `AdkWebServer`'s own auto-configuration registers its beans (`sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter` — all `InMemory*` by default) [[2]](#references).
 5. `CompiledAgentLoader` (`@Service("agentLoader")`, active by default via `@ConditionalOnProperty(matchIfMissing=true)`) scans `--adk.agents.source-dir=target/classes` for classes exposing `public static final BaseAgent ROOT_AGENT`, and registers one entry per `demo-*` agent in the Web UI dropdown [[3]](#references).
 
@@ -107,7 +107,7 @@ src/main/java/com/poc/adk/
   SupportAssistantApplication.java
   bootstrap/
     AppServices.java              // static holder: repositories, QdrantClient, Tracer, ModelFactory
-    AppServicesInitializer.java   // ApplicationRunner — populates AppServices, seeds H2 + Qdrant
+    AppServicesInitializer.java   // ApplicationRunner — populates AppServices; later indexes Qdrant (does not INSERT H2 rows)
   config/
     ModelRoutingProperties.java   // @ConfigurationProperties("llm")
     ObservabilityConfig.java      // OpenTelemetrySdk + OTLP exporter bean
