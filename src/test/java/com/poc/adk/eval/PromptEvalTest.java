@@ -29,12 +29,25 @@ class PromptEvalTest {
 
   @Test
   void demoSingleAgent_mentionsDelayedFromFrozenToolJson() throws Exception {
+    runPromptEvalCase("/eval/demo-single-agent.v1.eval.json", 0);
+  }
+
+  @Test
+  void demoDynamicRouting_refundQueryMentionsBillingSpecialist() throws Exception {
+    runPromptEvalCase("/eval/demo-dynamic-routing.v1.eval.json", 0);
+  }
+
+  @Test
+  void demoHitlApproval_highAmountRequestsApprovalWithoutCompletingRefund() throws Exception {
+    runPromptEvalCase("/eval/demo-hitl-approval.v1.eval.json", 0);
+  }
+
+  private void runPromptEvalCase(String fixturePath, int caseIndex) throws Exception {
     JsonNode root;
-    try (InputStream in =
-        PromptEvalTest.class.getResourceAsStream("/eval/demo-single-agent.v1.eval.json")) {
+    try (InputStream in = PromptEvalTest.class.getResourceAsStream(fixturePath)) {
       root = MAPPER.readTree(in);
     }
-    JsonNode testCase = root.get("cases").get(0);
+    JsonNode testCase = root.get("cases").get(caseIndex);
     String prompt = AgentPrompts.load(root.get("prompt").asText());
     String userMessage = testCase.get("user_message").asText();
     String frozen = MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(testCase.get("frozen_tool_results"));

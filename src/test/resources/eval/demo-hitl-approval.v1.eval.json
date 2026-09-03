@@ -1,0 +1,19 @@
+{
+  "prompt": "prompts/demo-hitl-approval.v1.md",
+  "cases": [
+    {
+      "id": "high-amount-needs-approval",
+      "user_message": "Process a refund for ORD-5010 (USD 350).",
+      "frozen_tool_results": {
+        "process_refund": {
+          "order_id": "ORD-5010",
+          "amount": 350,
+          "threshold": 200,
+          "status": "pending_confirmation"
+        }
+      },
+      "must_contain": ["approval", "confirm"],
+      "must_not_contain": ["refund processed", "refund completed", "REFUNDED"]
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "prompt": "prompts/demo-dynamic-routing-coordinator.v1.md",
+  "cases": [
+    {
+      "id": "refund-routes-billing",
+      "user_message": "I want a refund for ORD-5001.",
+      "frozen_tool_results": {},
+      "must_contain": ["billing"],
+      "must_not_contain": ["shipping specialist", "account specialist"]
+    }
+  ]
+}

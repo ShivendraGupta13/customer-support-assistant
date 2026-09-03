@@ -44,6 +44,10 @@ public class Payment {
     return status;
   }
 
+  public void setStatus(String status) {
+    this.status = status;
+  }
+
   public BigDecimal getAmount() {
     return amount;
   }

@@ -9,6 +9,7 @@ import com.poc.adk.risk.fraud.FraudSignalRepository;
 import com.poc.adk.tools.FraudSignalTool;
 import com.poc.adk.tools.OrderLookupTool;
 import com.poc.adk.tools.PaymentHistoryTool;
+import com.poc.adk.tools.RefundTool;
 import com.poc.adk.tools.ShipmentTrackingTool;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,5 +40,10 @@ public class ToolIntegrationConfig {
   @Bean
   CustomerPreferenceTool customerPreferenceTool(CustomerPreferenceRepository preferences) {
     return new CustomerPreferenceTool(preferences);
+  }
+
+  @Bean
+  RefundTool refundTool(OrderRepository orders, PaymentRepository payments) {
+    return new RefundTool(orders, payments);
   }
 }
