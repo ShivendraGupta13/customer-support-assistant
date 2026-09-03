@@ -38,14 +38,15 @@ This is the manual test script for every feature built in this project.
 
 ### Prerequisites
 
-**Ollama** — pull the model and start the server:
+**Ollama** — pull the chat model, the embedding model, and start the server:
 
 ```bash
 ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
 ollama serve
 ```
 
-Server should be available at `http://localhost:11434`.
+Chat API: `http://localhost:11434`. Embeddings (`nomic-embed-text`) are required so startup can index policy docs into Qdrant.
 
 **Docker** — start Qdrant and Langfuse:
 
@@ -80,7 +81,24 @@ Long-term personalization uses `customer_id` in **initial `session.state`** at s
 | Run as Alex | **Another** new session with `{"customer_id": "CUST-1002"}` |
 | Change customer | New session (do not switch mid-session) |
 
-Exact REST path (ADK **1.9.0**): `POST /apps/{appName}/users/{userId}/sessions` with body `{"state":{"customer_id":"CUST-1001"}}`. Copy-paste curls and `appName`/`userId` convention: `tasks/plan.md` → Spike findings. Send §8 queries on the returned session id via `/run` or `/run_sse`. Dev UI: **More options → Update state** (or REST); `bind_customer` is not required.
+`appName` must equal the selected agent's `name()` (Dev UI dropdown). For §8 that is `demo-memory-personalization`. `userId` is `playbook-user`.
+
+```bash
+# Priya (CUST-1001) — Playbook §8.1
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
+  -H "Content-Type: application/json" \
+  -d '{"state":{"customer_id":"CUST-1001"}}'
+
+# Alex (CUST-1002) — Playbook §8.2 (new session)
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
+  -H "Content-Type: application/json" \
+  -d '{"state":{"customer_id":"CUST-1002"}}'
+
+# Prove state stuck: replace SESSION_ID from the create response.
+curl -s "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions/SESSION_ID"
+```
+
+Send §8 queries on the returned session id via `/run` or `/run_sse` (or chat in Dev UI on that session). Dev UI alternative: **More options → Update state** with `{"customer_id":"CUST-1001"}` before the first message. `bind_customer` is not required.
 
 ### Canonical seed data
 
@@ -301,4 +319,15 @@ For any scenario above, open Langfuse and confirm:
 
 **POC topics:** Evaluation — Golden datasets, Prompt evaluation, Agent evaluation, Tool evaluation.
 
-Run layered tests via `mvn test` (Layers 0–3). Do not debug by editing prompts in the Web UI. See `spec.md` → Testing Strategy for commands, pass criteria, prompt-eval fixtures, and workflow event assertions.
+Run Layers 0–3 independently so a Playbook miss localizes to one layer. Do not debug by editing prompts in the Web UI. Do not use the ADK Web Eval tab. There is no LLM-as-judge merge gate.
+
+Actual commands (spec names were indicative): [`tasks/plan.md`](../tasks/plan.md) → Evaluation harness commands.
+
+| Layer | Command |
+| ----- | ------- |
+| 0 | `mvn test -Dtest=ToolEvalTest,GuardrailEvalTest` |
+| 1 | `mvn test -Dtest=RetrievalEvalTest` |
+| 2 | `mvn test -Dtest=PromptEvalTest` |
+| 3 | `mvn test -Dtest=EvaluationHarnessTest` |
+
+Pass criteria, prompt-eval fixtures, and workflow event assertions: `spec.md` → Testing Strategy.

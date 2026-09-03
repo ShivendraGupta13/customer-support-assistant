@@ -42,6 +42,16 @@ class PromptEvalTest {
     runPromptEvalCase("/eval/demo-hitl-approval.v1.eval.json", 0);
   }
 
+  @Test
+  void demoRagPolicy_refundWindowCitesRefundPolicySection() throws Exception {
+    runPromptEvalCase("/eval/demo-rag-policy.v1.eval.json", 0);
+  }
+
+  @Test
+  void demoRagPolicy_loyaltyExceptionCodesCiteLoyaltyNotShipping() throws Exception {
+    runPromptEvalCase("/eval/demo-rag-policy.v1.eval.json", 1);
+  }
+
   private void runPromptEvalCase(String fixturePath, int caseIndex) throws Exception {
     JsonNode root;
     try (InputStream in = PromptEvalTest.class.getResourceAsStream(fixturePath)) {

@@ -330,9 +330,9 @@ The failure mode to avoid: something looks wrong in the UI → tweak the system 
 
 Evaluate flakiness by **layer**, not by "did the Playbook look good once."
 
-| Layer              | What it proves                                                                                                      | LLM?                               | Pass on qwen? | Command (indicative; finalized in `plan.md`) | If it fails |
+| Layer              | What it proves                                                                                                      | LLM?                               | Pass on qwen? | Command (see `tasks/plan.md` → Evaluation harness commands) | If it fails |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------- | -------------------------------------------- | ----------- |
-| 0. Tool eval       | Domain tools + guardrail helpers return the right records / masks                                                   | No                                 | Must pass     | `mvn test -Dtest=ToolEvalTest`               | Fix tool/repo — not a model issue |
+| 0. Tool eval       | Domain tools + guardrail helpers return the right records / masks                                                   | No                                 | Must pass     | `mvn test -Dtest=ToolEvalTest,GuardrailEvalTest`               | Fix tool/repo — not a model issue |
 | 1. Retrieval eval  | Chunking, citation metadata, dense vs hybrid ranking                                                                | No                                 | Must pass     | `mvn test -Dtest=RetrievalEvalTest`          | Fix indexer/retriever — not a model issue |
 | 2. Prompt eval     | Given **frozen** context (canned tool JSON or policy chunks), does the **wording** of the reply match requirements? | Yes (`@Tag("llm")`, temperature 0) | After tuning  | `mvn test -Dtest=PromptEvalTest`             | Edit versioned prompt + eval fixture |
 | 3. Agent eval      | Full `Runner` loop: did the agent **choose** the right tools/routes/workflow steps, and produce acceptable output?  | Yes (`@Tag("llm")`)                | Must pass     | `mvn test -Dtest=EvaluationHarnessTest`      | Fix graph/prompt — not a retrieval issue |
@@ -430,7 +430,8 @@ src/main/resources/policies/   → markdown policy documents (RAG source, not H2
 src/main/resources/prompts/    → versioned agent instructions (`{agent}.v1.md`)
 src/test/resources/eval/       → golden datasets + prompt-eval fixtures
 src/test/java/...
-docs/           → spec.md, playbook.md, architecture.md, plan.md (this series)
+docs/           → spec.md, playbook.md, architecture.md
+tasks/          → plan.md (implementation plan), todo.md
 docker-compose.yml → Qdrant + Langfuse (repo root)
 data/           → H2 file-mode database (gitignored)
 ```

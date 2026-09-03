@@ -89,7 +89,7 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 
 ### Checkpoint: Layers 0–1
 
-- [x] `mvn test -Dtest=ToolEvalTest,RetrievalEvalTest` pass with no chat LLM
+- [x] `mvn test -Dtest=ToolEvalTest,GuardrailEvalTest,RetrievalEvalTest` pass with no chat LLM
 - [ ] Qdrant `policy_chunks` populated on app start
 - [ ] Review with human before demo agents
 
@@ -101,23 +101,30 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 - [x] Task 15: `demo-dynamic-routing` (§4)
 - [x] Task 16: `demo-hitl-approval` (§5)
 - [x] Task 17: `demo-loop-refinement` (§6)
-- [ ] Task 18: `demo-rag-policy` (§7)
-- [ ] Task 19: `demo-memory-personalization` (§8)
+- [x] Task 18: `demo-rag-policy` (§7)
+- [x] Task 19: `demo-memory-personalization` (§8)
 
 ### Checkpoint: Demos
 
-- [ ] Dropdown lists every `demo-*`
-- [ ] Layers 2–3 pass on qwen / `TestLlm` per spec
+- [x] Dropdown lists every `demo-*`
+- [x] Layers 2–3 pass on qwen / `TestLlm` per spec
 - [ ] Playbook §1–8 runnable; weak prose uses spec cloud-fallback table, not prompt stuffing
 
 ### Phase 3: Harness and docs
 
-- [ ] Task 20: `evaluation-harness` consolidation
-- [ ] Task 21: Playbook session curl + README closeout
+- [x] Task 20: `evaluation-harness` consolidation
+- [x] Task 21: Playbook session curl + README closeout
+
+### Checkpoint: Phase 3 (harness + docs)
+
+- [x] Layer 0–3 commands in this file → Evaluation harness commands; mirrored in `README.md`, `docs/playbook.md`, `docs/spec.md`
+- [x] `mvn -q test` green (`EvaluationHarnessTest` excluded from default Surefire run; use `-Dtest=EvaluationHarnessTest` for Layer 3 suite)
+- [ ] Manual: README quick start → Playbook Global Setup → verify §1–2 (Task 21)
+- [ ] Review with human before Complete checkpoint
 
 ### Checkpoint: Complete
 
-- [ ] Spec success criteria met
+- [ ] Spec success criteria met (automated eval layers pass; full Playbook §1–8 manual + D11 cloud switch still pending)
 - [ ] Definition of Done cleared (correctness, docs, human review)
 - [ ] Ready for review — not a production launch
 
@@ -170,6 +177,23 @@ curl -s "http://localhost:8000/apps/stub-agent/users/playbook-user/sessions/SESS
   - [`SessionRequest.java` @ v1.9.0](https://github.com/google/adk-java/blob/v1.9.0/dev/src/main/java/com/google/adk/web/dto/SessionRequest.java) — `@JsonProperty("state")`
   - Dev UI `dev/browser/main-*.js` @ v1.9.0 — `createSession(userId, appName, state?)`; `updateState()` dialog → `updatedSessionState` → `stateDelta` on run
 - **Live verification (Tasks 2 + 3):** 2026-09-03 — booted `stub-agent`; `POST /apps/stub-agent/users/playbook-user/sessions` with `{"state":{"customer_id":"CUST-1001"}}`; `GET .../sessions/{id}` returned the same `customer_id`. Recorded in [`README.md`](../README.md).
+
+## Evaluation harness commands (Task 20)
+
+Spec Testing Strategy names are indicative. Actual `-Dtest` class names:
+
+| Layer | Command | LLM? | Notes |
+| --- | --- | --- | --- |
+| 0. Tool eval | `mvn test -Dtest=ToolEvalTest,GuardrailEvalTest` | No | Spec listed only `ToolEvalTest`; `GuardrailEvalTest` covers injection / PII / audit |
+| 1. Retrieval eval | `mvn test -Dtest=RetrievalEvalTest` | No chat LLM | Needs Qdrant + Ollama `nomic-embed-text` |
+| 2. Prompt eval | `mvn test -Dtest=PromptEvalTest` | Yes (`@Tag("llm")`, temperature 0) | Fixtures: `src/test/resources/eval/*.v1.eval.json`. Catalog: `EvalCatalogTest` (no LLM) |
+| 3. Agent eval | `mvn test -Dtest=EvaluationHarnessTest` | No | JUnit suite of Playbook §1–8 `*EvalTest` in `com.poc.adk.agents`. Uses `ScriptedLlm`, not a chat LLM and **not** LLM-as-judge |
+
+Layer 3 members (also runnable individually): `SingleAgentEvalTest`, `SequentialInvestigationEvalTest`, `ParallelInvestigationEvalTest`, `DynamicRoutingEvalTest`, `HitlApprovalEvalTest`, `LoopRefinementEvalTest`, `RagPolicyEvalTest` (needs Qdrant), `MemoryPersonalizationEvalTest`.
+
+`mvn test` (no `-Dtest`) runs the eight member classes directly; `EvaluationHarnessTest` is excluded from the default Surefire run so Layer 3 is not executed twice. `-Dtest=EvaluationHarnessTest` still runs the suite.
+
+Do not use the ADK Web Eval tab (unimplemented in Java: [adk-java#300](https://github.com/google/adk-java/issues/300)).
 
 ## Standing Definition of Done
 

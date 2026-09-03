@@ -1,0 +1,49 @@
+{
+  "prompt": "prompts/demo-rag-policy.v1.md",
+  "cases": [
+    {
+      "id": "refund-window",
+      "user_message": "How many days do I have to request a refund?",
+      "frozen_tool_results": {
+        "policy_retrieve": {
+          "query": "refund request window",
+          "chunks": [
+            {
+              "doc_id": "refund-policy",
+              "source_path": "refund-policy.md",
+              "section_heading": "Refund request window",
+              "chunk_index": 0,
+              "text": "Customers have **30 days** from the delivery date to request a refund. The request window is measured from the carrier's recorded delivery timestamp, not from the order-placed date.",
+              "citation": "Source: refund-policy.md — Refund request window",
+              "score": 0.91
+            }
+          ]
+        }
+      },
+      "must_contain": ["30", "refund-policy.md", "Refund request window"],
+      "must_not_contain": ["shipping-policy.md"]
+    },
+    {
+      "id": "loyalty-exception-codes",
+      "user_message": "Does exception code NW-SHIP-EXC-04 apply to SKU NW-HP-1001?",
+      "frozen_tool_results": {
+        "policy_retrieve": {
+          "query": "Does exception code NW-SHIP-EXC-04 apply to SKU NW-HP-1001?",
+          "chunks": [
+            {
+              "doc_id": "loyalty-policy",
+              "source_path": "loyalty-policy.md",
+              "section_heading": "Courtesy weather-hold exception codes",
+              "chunk_index": 0,
+              "text": "GOLD members may receive a one-time courtesy weather-hold refund when exception code **NW-SHIP-EXC-04** applies to SKU **NW-HP-1001**. This courtesy is a loyalty benefit, not a shipping-policy rule.",
+              "citation": "Source: loyalty-policy.md — Courtesy weather-hold exception codes",
+              "score": 0.88
+            }
+          ]
+        }
+      },
+      "must_contain": ["NW-SHIP-EXC-04", "NW-HP-1001", "loyalty-policy.md", "Courtesy weather-hold"],
+      "must_not_contain": ["shipping-policy.md"]
+    }
+  ]
+}

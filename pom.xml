@@ -81,6 +81,11 @@
       <artifactId>spring-boot-starter-data-jpa-test</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.junit.platform</groupId>
+      <artifactId>junit-platform-suite</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
 
   <build>
@@ -105,6 +110,12 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
         <version>3.5.3</version>
+        <configuration>
+          <!-- Suite is Layer 3's focused command; members still run as *EvalTest. -->
+          <excludes>
+            <exclude>**/EvaluationHarnessTest.java</exclude>
+          </excludes>
+        </configuration>
       </plugin>
     </plugins>
   </build>

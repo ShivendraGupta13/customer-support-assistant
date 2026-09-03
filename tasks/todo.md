@@ -4,9 +4,9 @@ Companion to `tasks/plan.md`. Standing bar: `.cursor/references/definition-of-do
 
 Build (once a `pom.xml` exists): `mvn -q compile`
 
-Focused tests (indicative names from `docs/spec.md`; Task 20 records the real class names if they differ):
+Focused tests (actual names; see `tasks/plan.md` → Evaluation harness commands):
 
-- Layer 0: `mvn test -Dtest=ToolEvalTest`
+- Layer 0: `mvn test -Dtest=ToolEvalTest,GuardrailEvalTest`
 - Layer 1: `mvn test -Dtest=RetrievalEvalTest`
 - Layer 2: `mvn test -Dtest=PromptEvalTest`
 - Layer 3: `mvn test -Dtest=EvaluationHarnessTest`
@@ -349,7 +349,7 @@ mvn compile exec:java
 
 ## Checkpoint: Layers 0-1
 
-- [x] `mvn test -Dtest=ToolEvalTest,RetrievalEvalTest` pass with no chat LLM
+- [x] `mvn test -Dtest=ToolEvalTest,GuardrailEvalTest,RetrievalEvalTest` pass with no chat LLM
 - [ ] Application builds; Qdrant `policy_chunks` populated on start
 - [ ] Review with human before demo agents
 
@@ -511,12 +511,13 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** Policy Q&A grounded in `HybridRetriever` with citations from payload metadata, including the hybrid trap and the not-covered case.
 
 **Acceptance criteria:**
-- [ ] §7.1 cites refund-policy section; §7.2 uses both shipping and refund docs; §7.3 cites loyalty not shipping for the exception codes; §7.4 says not covered
-- [ ] Layer 2 frozen-chunk fixtures; Layer 3 retrieval span / citation assertions
+- [x] §7.1 cites refund-policy section; §7.3 cites loyalty not shipping for the exception codes (agent + Layer 2/3 tests)
+- [ ] §7.2 uses both shipping and refund docs; §7.4 says not covered (agent prompt supports both; no Layer 2/3 fixture yet)
+- [x] Layer 2 frozen-chunk fixtures; Layer 3 retrieval span / citation assertions
 
 **Verification:**
-- [ ] Tests pass: Layer 2 RAG fixtures + Layer 3
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 2 RAG fixtures + Layer 3 (`RagPolicyEvalTest`, `PromptEvalTest` RAG cases)
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §7; if §7.3 cites shipping weather, re-run Layer 1 first — do not stuff codes into the prompt
 
 **Dependencies:** Task 11c, Task 12
@@ -533,12 +534,12 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** Cross-session recall of contact preference using `customer_id` from initial session state (Task 2 curl). User message must not contain the preference or customer id.
 
 **Acceptance criteria:**
-- [ ] Session CUST-1001 → email; new session CUST-1002 → SMS
-- [ ] If Task 2 required `bind_customer`, that tool exists and Playbook documents it; otherwise REST/Dev UI state only
+- [x] Session CUST-1001 → email; new session CUST-1002 → SMS
+- [x] If Task 2 required `bind_customer`, that tool exists and Playbook documents it; otherwise REST/Dev UI state only (Task 2: no `bind_customer`; REST/Dev UI state only)
 
 **Verification:**
-- [ ] Tests pass: Layer 3 `InMemoryRunner` initial state assertions
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: Layer 3 `InMemoryRunner` initial state assertions (`MemoryPersonalizationEvalTest`)
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: Playbook §8 using the Task 2 curl (or Dev UI if spike allowed it)
 
 **Dependencies:** Task 2, Task 9, Task 12
@@ -552,8 +553,8 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 
 ## Checkpoint: Demos
 
-- [ ] Dropdown lists every `demo-*`
-- [ ] Layers 2–3 pass on qwen / `TestLlm` per spec
+- [x] Dropdown lists every `demo-*`
+- [x] Layers 2–3 pass on qwen / `TestLlm` per spec
 - [ ] Playbook §1–8 runnable; weak prose → spec cloud-fallback table, not prompt stuffing
 - [ ] Review with human before harness closeout
 
@@ -566,20 +567,23 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** Golden datasets and layered commands live in one place so a Playbook miss can be localized to Layer 0–3. Do not use the ADK Web Eval tab (unimplemented in Java).
 
 **Acceptance criteria:**
-- [ ] Fixtures under `src/test/resources/eval/`; `tasks/plan.md` records actual `mvn test -Dtest=...` names if they differ from spec
-- [ ] Layers 0–3 runnable independently; no LLM-as-judge merge gate
+- [x] Fixtures under `src/test/resources/eval/`; `tasks/plan.md` records actual `mvn test -Dtest=...` names if they differ from spec
+- [x] Layers 0–3 runnable independently; no LLM-as-judge merge gate
 
 **Verification:**
-- [ ] Tests pass: `mvn test` Layers 0–3 as documented
-- [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: D12 flow matches spec Testing Strategy
+- [x] Tests pass: `mvn test` Layers 0–3 as documented
+- [x] Build succeeds: `mvn -q test`
+- [x] Manual check: D12 flow matches spec Testing Strategy
 
 **Dependencies:** Tasks 12–19
 
 **Files likely touched:**
-- `src/test/java/.../EvaluationHarnessTest.java` (and related)
+- `src/test/java/com/poc/adk/eval/EvaluationHarnessTest.java`
+- `src/test/java/com/poc/adk/eval/EvalCatalogTest.java`
 - `src/test/resources/eval/`
+- `pom.xml` (`junit-platform-suite`; Surefire excludes `EvaluationHarnessTest` from default run)
 - `tasks/plan.md` (command names)
+- `docs/spec.md`, `docs/playbook.md` (layer commands)
 
 **Estimated scope:** Medium: 3-5 files
 
@@ -588,12 +592,12 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 **Description:** A new session can start the app and run the Playbook without reading architecture. Paste the Task 2 curl into Playbook Global Setup.
 
 **Acceptance criteria:**
-- [ ] Playbook Global Setup has the exact create-session curl; README covers Ollama, `docker compose`, and the `exec:java` command
-- [ ] Spec success checklist still holds; `docs/spec.md` project-structure line points at `tasks/plan.md` (not a stale `docs/plan.md`)
+- [x] Playbook Global Setup has the exact create-session curl; README covers Ollama, `docker compose`, and the `exec:java` command
+- [x] Spec success checklist still holds; `docs/spec.md` project-structure line points at `tasks/plan.md` (not a stale `docs/plan.md`)
 
 **Verification:**
-- [ ] Tests pass: existing suite still green
-- [ ] Build succeeds: `mvn -q test`
+- [x] Tests pass: existing suite still green
+- [x] Build succeeds: `mvn -q test`
 - [ ] Manual check: follow README from a clean checkout through Playbook verify steps 1–2
 
 **Dependencies:** Task 2, Task 3, Task 20
@@ -605,8 +609,15 @@ Each demo: versioned `src/main/resources/prompts/{agent}.v1.md`, `public static 
 
 **Estimated scope:** Small: 1-2 files (three if spec layout is updated here)
 
+## Checkpoint: Phase 3 (harness + docs)
+
+- [x] Layer 0–3 commands documented in `tasks/plan.md`, `README.md`, `docs/playbook.md`, and `docs/spec.md`
+- [x] `mvn -q test` green (61 tests; `EvaluationHarnessTest` excluded from default run, runnable via `-Dtest=`)
+- [ ] Manual check: README → Playbook Global Setup → verify §1–2 in Dev UI (Task 21)
+- [ ] Review with human before declaring complete
+
 ## Checkpoint: Complete
 
-- [ ] Spec success criteria met
-- [ ] Definition of Done cleared
+- [ ] Spec success criteria met (automated layers 0–3 pass; manual Playbook §1–8 and D11 still pending)
+- [ ] Definition of Done cleared (human review per `.cursor/references/definition-of-done.md`)
 - [ ] Ready for review — not a production launch

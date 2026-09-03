@@ -14,13 +14,16 @@ import com.poc.adk.commerce.payment.PaymentRepository;
 import com.poc.adk.eval.ScriptedLlm;
 import com.poc.adk.integration.config.GuardrailIntegrationConfig;
 import com.poc.adk.integration.config.ToolIntegrationConfig;
+import com.poc.adk.tools.RefundTool;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.TestPropertySource;
 
 @DataJpaTest(
     properties = {
@@ -31,11 +34,20 @@ import org.springframework.context.annotation.Import;
       "spring.sql.init.data-locations=classpath:data.sql"
     })
 @Import({ToolIntegrationConfig.class, GuardrailIntegrationConfig.class})
+@TestPropertySource(properties = "poc.eval.hitl-isolated=true")
 class HitlApprovalEvalTest {
 
   private static final String ORDER_ID = "ORD-5010";
 
   @Autowired PaymentRepository payments;
+  @Autowired RefundTool refundTool;
+
+  @BeforeEach
+  void resetOrd5010PaymentToCaptured() {
+    var payment = payments.findByOrderId(ORDER_ID).orElseThrow();
+    payment.setStatus("CAPTURED");
+    payments.saveAndFlush(payment);
+  }
 
   @Test
   void layer3_highAmountRefundRequestsConfirmationThenApproves() {
@@ -43,6 +55,7 @@ class HitlApprovalEvalTest {
         ScriptedLlm.of(
             ScriptedLlm.functionCall("process_refund", Map.of("order_id", ORDER_ID)),
             ScriptedLlm.text("This refund requires manager approval before processing."),
+            ScriptedLlm.functionCall("process_refund", Map.of("order_id", ORDER_ID)),
             ScriptedLlm.text("Refund for ORD-5010 has been processed."));
 
     LlmAgent agent = HitlApprovalAgent.create(llm);
@@ -82,6 +95,7 @@ class HitlApprovalEvalTest {
         ScriptedLlm.of(
             ScriptedLlm.functionCall("process_refund", Map.of("order_id", ORDER_ID)),
             ScriptedLlm.text("This refund requires manager approval before processing."),
+            ScriptedLlm.functionCall("process_refund", Map.of("order_id", ORDER_ID)),
             ScriptedLlm.text("The refund was not approved."));
 
     LlmAgent agent = HitlApprovalAgent.create(llm);
