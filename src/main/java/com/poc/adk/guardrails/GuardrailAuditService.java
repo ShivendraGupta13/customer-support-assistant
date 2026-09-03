@@ -6,8 +6,8 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * Writes {@link GuardrailAuditLog} rows. Constructed as a Spring bean; callbacks reach it through
- * the static instance (same pattern as tools).
+ * Writes {@link GuardrailAuditLog} rows. Constructed as a Spring bean and injected into guardrail
+ * callbacks via {@link Guardrails#apply}.
  */
 public final class GuardrailAuditService {
 

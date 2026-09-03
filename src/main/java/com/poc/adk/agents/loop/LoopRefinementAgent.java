@@ -1,6 +1,5 @@
 package com.poc.adk.agents.loop;
 
-import com.google.adk.agents.BaseAgent;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.LoopAgent;
 import com.google.adk.agents.SequentialAgent;
@@ -8,16 +7,11 @@ import com.google.adk.models.BaseLlm;
 import com.google.adk.tools.ExitLoopTool;
 import com.poc.adk.agents.common.AgentModels;
 import com.poc.adk.agents.common.AgentPrompts;
-import com.poc.adk.agents.common.ContextLlm;
-import com.poc.adk.guardrails.Guardrails;
-
 import com.poc.adk.guardrails.GuardrailAuditService;
+import com.poc.adk.guardrails.Guardrails;
 
 /** Playbook §6 — LoopAgent draft→critique until exit, then publisher emits final draft only. */
 public final class LoopRefinementAgent {
-
-  public static final BaseAgent ROOT_AGENT =
-      create(new ContextLlm(), new ContextLlm(), new ContextLlm(), null);
 
   public static SequentialAgent create(
       BaseLlm drafterModel,

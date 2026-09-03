@@ -104,7 +104,7 @@ This request bundles many independently testable capabilities. Below is the deco
 
 ### Agent registration
 
-Each `demo-*` module registers its own `public static final BaseAgent ROOT_AGENT`, so all demo agents appear as separate selectable entries in the ADK Web UI's agent dropdown — each Playbook scenario tells you exactly which one to pick.
+Each `demo-*` agent is a Spring `@Bean` built by `AgentBeansConfig` and registered through `SpringAgentLoader`, so all demo agents appear as separate selectable entries in the ADK Web UI's agent dropdown — each Playbook scenario tells you exactly which one to pick.
 
 ## Application Bootstrap
 
@@ -124,8 +124,8 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
   -Dexec.args="--adk.agents.source-dir=target --server.port=8000"
 ```
 
-- **Agent loading** — default `CompiledAgentLoader` scans `--adk.agents.source-dir` for `public static final BaseAgent ROOT_AGENT` on each `demo-*` class.
-- **Spring wiring** — `ROOT_AGENT` is not a Spring bean. Chat/OTel/Qdrant use module-scoped static bridges in `integration/adk/` (`LlmContext`, `TracingContext`, `VectorContext`), each populated by a `@Bean` during context refresh. Each function tool is its own Spring bean and receives only the repository it needs; methods stay static so `FunctionTool.create(Class, methodName)` does not capture the instance while `CompiledAgentLoader` constructs `ROOT_AGENT`. Do not use a single `AppServices` / `ToolDependencies` holder or an `ApplicationRunner` for this wiring.
+- **Agent loading** — `SpringAgentLoader` (`adk.agents.loader: spring`) registers all Spring-managed `BaseAgent` beans from `AgentBeansConfig`. Each factory injects wired tools and `GuardrailAuditService`, then binds tools with `FunctionTool.create(bean, methodName)`.
+- **Spring wiring** — Chat/OTel/Qdrant still use module-scoped static bridges in `integration/adk/` (`LlmContext`, `TracingContext`, `VectorContext`), each populated by a `@Bean` during context refresh. Each function tool is its own Spring bean and receives only the repository it needs; tool methods are instance methods on those beans. Do not use a single `AppServices` / `ToolDependencies` holder or an `ApplicationRunner` for this wiring.
 - **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter`, `openTelemetrySdk`, `sdkTracerProvider`, `apiServerSpanExporter`, or `apiServerSpanExporterConfig` in `com.poc.adk`; `AdkWebServer` / `OpenTelemetryConfig` already register them.
 
 ## Memory

@@ -1,6 +1,5 @@
 package com.poc.adk.agents.parallel;
 
-import com.google.adk.agents.BaseAgent;
 import com.google.adk.agents.LlmAgent;
 import com.google.adk.agents.ParallelAgent;
 import com.google.adk.agents.SequentialAgent;
@@ -8,7 +7,6 @@ import com.google.adk.models.BaseLlm;
 import com.google.adk.tools.FunctionTool;
 import com.poc.adk.agents.common.AgentModels;
 import com.poc.adk.agents.common.AgentPrompts;
-import com.poc.adk.agents.common.ContextLlm;
 import com.poc.adk.guardrails.GuardrailAuditService;
 import com.poc.adk.guardrails.Guardrails;
 import com.poc.adk.tools.FraudSignalTool;
@@ -20,17 +18,6 @@ import com.poc.adk.tools.ShipmentTrackingTool;
  * SequentialAgent root.
  */
 public final class ParallelInvestigationAgent {
-
-  public static final BaseAgent ROOT_AGENT =
-      create(
-          new ContextLlm(),
-          new ContextLlm(),
-          new ContextLlm(),
-          new ContextLlm(),
-          new PaymentHistoryTool(null),
-          new ShipmentTrackingTool(null),
-          new FraudSignalTool(null),
-          null);
 
   public static SequentialAgent create(
       BaseLlm paymentModel,

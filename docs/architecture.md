@@ -50,7 +50,7 @@ flowchart LR
     Shared -.->|OTel| LF
 ```
 
-- REST surface: `/run`, `/run_sse`. Agent discovery: `CompiledAgentLoader` scans `adk.agents.source-dir` for `ROOT_AGENT`.
+- REST surface: `/run`, `/run_sse`. Agent discovery: `SpringAgentLoader` (`adk.agents.loader: spring`) registers Spring-managed `BaseAgent` beans from `AgentBeansConfig`.
 - H2 file DB at `./data/support-assistant`. Qdrant and Langfuse run in Docker (`:6334` gRPC, `:3000` UI).
 - `ModelFactory` reads `llm.provider` and returns one ADK `BaseLlm` — agents never hard-code a vendor. Switching `ollama` → `gemini` is config-only (see [§5](#5-model-routing--d11)).
 - Dense embeddings (`nomic-embed-text`) go through `EmbeddingClient` → Ollama directly, not through `ModelFactory`.
@@ -65,9 +65,9 @@ flowchart LR
 2. Our `@Configuration` classes build: JPA/H2, `QdrantClient` (gRPC, `:6334`), the `OpenTelemetrySdk` (OTLP/HTTP exporter → Langfuse), and `ModelFactory`.
 3. During context refresh (not an `ApplicationRunner`), `@Bean` methods populate `LlmContext` / `TracingContext` / `VectorContext` and construct one Spring bean per function tool (each with only its repository). Hibernate `ddl-auto=create-drop` creates H2 tables from JPA entities (mapped 1:1 to `schema.sql`); business rows come from `data.sql` only. After RAG exists, a separate `PolicyChunkIndexer` `ApplicationRunner` embeds policy markdown into Qdrant if the collection is empty — it must never `save()` / `INSERT` Northwind tables.
 4. `AdkWebServer`'s own auto-configuration registers its beans (`sessionService`, `artifactService`, `memoryService`, `objectMapper`, `mappingJackson2HttpMessageConverter` — all `InMemory*` by default) [[2]](#references).
-5. `CompiledAgentLoader` (`@Service("agentLoader")`, active by default via `@ConditionalOnProperty(matchIfMissing=true)`) scans `--adk.agents.source-dir=target` for classes exposing `public static final BaseAgent ROOT_AGENT`, and registers one entry per `demo-*` agent in the Web UI dropdown [[3]](#references). Pass `target` (Maven build output root), not `target/classes` — the latter treats package folders as agent units and finds none.
+5. `SpringAgentLoader` (`@Service("agentLoader")`, `@Primary`, selected via `adk.agents.loader: spring`) collects all Spring `BaseAgent` beans from `AgentBeansConfig` and registers one entry per `demo-*` agent in the Web UI dropdown. Each agent factory receives wired tool beans and `GuardrailAuditService`, binding tools with `FunctionTool.create(bean, methodName)`.
 
-Step 3 must complete before step 5 can serve a request: agent classes are loaded reflectively by class-path scanning, not instantiated by Spring, so they are never `@Autowired`. Chat/OTel/Qdrant use module-scoped static bridges (`LlmContext`, `TracingContext`, `VectorContext`). Each tool is its own Spring bean and receives only the repository it needs (`OrderLookupTool(OrderRepository)`, not a shared `ToolDependencies` bag). Tool methods stay **static** so `FunctionTool.create(Class, methodName)` can run while `CompiledAgentLoader` reads `ROOT_AGENT` in its constructor — that is during context refresh, in undefined order relative to our tool beans. The repository is resolved at **invocation** time, after every singleton exists. An `ApplicationRunner` is too late for bridges the static `ROOT_AGENT` graph reads.
+Step 3 must complete before step 5 can serve a request: agent graphs are Spring beans built after their tool and LLM dependencies exist. Chat/OTel/Qdrant still use module-scoped static bridges (`LlmContext`, `TracingContext`, `VectorContext`) for callers that are not Spring-managed. Each tool is its own Spring bean and receives only the repository it needs (`OrderLookupTool(OrderRepository)`, not a shared `ToolDependencies` bag). Tool methods are **instance** methods on those beans.
 
 ### 2.2 Bean-name collision — resolved
 
@@ -126,7 +126,8 @@ src/main/java/com/poc/adk/
     ObservabilityConfig.java      // OpenTelemetrySdk + OTLP exporter bean
     QdrantConfig.java             // QdrantClient bean + collection bootstrap (idempotent)
   integration/
-    adk/                          // static bridges for non-Spring ROOT_AGENT (not tools)
+    adk/                          // SpringAgentLoader + static bridges for chat/OTel/Qdrant
+      SpringAgentLoader.java      // AgentLoader over Spring BaseAgent beans
       LlmContext.java             // ModelFactory + BaseLlm
       TracingContext.java         // Tracer / OTel helpers
       VectorContext.java          // QdrantClient (Task 11)
@@ -134,6 +135,10 @@ src/main/java/com/poc/adk/
       ToolIntegrationConfig.java  // one @Bean per tool; each tool holds only its repo
       LlmIntegrationConfig.java
       ObservabilityIntegrationConfig.java
+  agents/
+    config/AgentBeansConfig.java  // one @Bean per demo-* agent graph
+    singleagent/, sequential/, parallel/, routing/, hitl/, loop/, rag/, personalization/
+      // one factory class per demo-*; Spring beans created in AgentBeansConfig
   tools/
     OrderLookupTool.java, PaymentHistoryTool.java, ShipmentTrackingTool.java, FraudSignalTool.java
     RefundTool.java               // HITL threshold check inside the method body — see 2.3 / D5
@@ -149,9 +154,6 @@ src/main/java/com/poc/adk/
     HybridRetriever.java          // dense prefetch + BM25 prefetch + RRF in one queryAsync
     CitationFormatter.java
     PolicyChunkIndexer.java       // ApplicationRunner — indexes policy markdown; does not INSERT H2 rows
-  agents/
-    singleagent/, sequential/, parallel/, routing/, hitl/, loop/, rag/, personalization/
-      // one class per demo-*, each exposing `public static final BaseAgent ROOT_AGENT`
 src/main/resources/
   policies/{refund,shipping,fraud,loyalty}-policy.md
   prompts/{agent}.v1.md
@@ -353,7 +355,7 @@ flowchart TD
 
 ### 6.2 Sequential Workflow — D2
 
-`SequentialAgent` never transfers control back to a parent `LlmAgent` [[9]](#references), so it is the registered `ROOT_AGENT`. Sub-agents chain via `outputKey` → `{key}` placeholders. Missing order `ORD-9999`: `order_lookup` returns empty; gather still completes; draft reports not found.
+`SequentialAgent` never transfers control back to a parent `LlmAgent` [[9]](#references), so it is the registered root agent bean. Sub-agents chain via `outputKey` → `{key}` placeholders. Missing order `ORD-9999`: `order_lookup` returns empty; gather still completes; draft reports not found.
 
 ```mermaid
 flowchart TD
@@ -605,7 +607,7 @@ L0–L1: no LLM. L2–L3: LLM, temperature 0. L4: manual Web UI. Localize the fa
 | 4   | Embeddings, guardrails, and observability stay local (Ollama `nomic-embed-text`, ADK callbacks, OTel → Langfuse). App is not deployed to GCP/AWS                    | Cloud services here add credentials and network without teaching more ADK. Langfuse is a named POC topic                                                             |
 | 5   | `ParallelAgent` / `LoopAgent` / `SequentialAgent` are each wrapped in (or are) a `SequentialAgent` root, with follow-up `LlmAgent`s as siblings reading `outputKey` | These workflow agents never hand control back to a parent `LlmAgent` [[9]](#references)                                                                              |
 | 6   | Long-term memory is a tool over H2 (`CustomerPreferenceTool`), not `BaseMemoryService`. Semantic memory is RAG over `policy_chunks`. Episodic descoped              | `AdkWebServer` hard-codes `InMemoryMemoryService`; overriding the bean name collides — see [§2.2](#22-bean-name-collision--resolved)                                 |
-| 7   | Agent classes reach Spring-managed infra via module-scoped `integration/adk` static bridges, each populated by a `@Bean` during context refresh                     | `CompiledAgentLoader` finds a static field; `@Autowired` is unavailable. A single `AppServices` holder was rejected (god object + `ApplicationRunner` is too late)   |
+| 7   | Demo agents are Spring `@Bean`s (`AgentBeansConfig`) loaded by `SpringAgentLoader`; tools are instance-bound via `FunctionTool.create(bean, method)`. Chat/OTel/Qdrant still use `integration/adk` static bridges | Avoids constructor-escape static tool singletons and race with reflective `ROOT_AGENT` loading. Bridges remain only for non-Spring callers (`LlmContext` / tracing / Qdrant) |
 | 8   | Dynamic routing uses `subAgents()` + implicit `transfer_to_agent`, not explicit `AgentTool` wrapping                                                                | Coordinator/Specialist with the least code [[10]](#references)                                                                                                       |
 | 9   | HITL threshold check lives inside the tool method body, not a static `requireConfirmation` flag                                                                     | $200 threshold is data-dependent [[11]](#references)                                                                                                                 |
 | 10  | Semantic memory = `policy_chunks` only. No second Qdrant collection                                                                                                 | Spec/playbook never define a separate fact corpus. Policy files already are the business rules; §8 long-term memory is H2 preferences                                |
@@ -623,7 +625,7 @@ Exact Qdrant image tag (≥ 1.15.2), Maven dependency versions, and prompt file 
 
 1. Spring Boot `spring-projects/spring-boot#39943` — scanning `AdkWebServer`'s package instead of calling `AdkWebServer.start()`.
 2. `AdkWebServer` API reference (`adk.dev/api-reference/java/com/google/adk/web/AdkWebServer.html`) — `sessionService()`, `artifactService()`, `memoryService()` bean methods; `google/adk-java#588`.
-3. `CompiledAgentLoader` API reference (`adk.dev/api-reference/java/com/google/adk/web/CompiledAgentLoader.html`).
+3. `AgentLoader` SPI / ADK web agent loading (`adk.dev` — `SpringAgentLoader` in this repo replaces reflective `CompiledAgentLoader` when `adk.agents.loader=spring`).
 4. `adk.dev/tools-custom/confirmation/` — Action confirmations, `FunctionResponse` shape for `adk_request_confirmation`.
 5. Ollama `nomic-embed-text` model card / Nomic documentation (`docs.nomic.ai/atlas/embeddings-and-retrieval/text-embedding`) — 768 dimensions.
 6. Qdrant `documentation/search/text-search/` and `text-search/full-text-search/` — filters vs. queries, BM25 via sparse vectors.
