@@ -1,8 +1,10 @@
 package com.poc.adk.integration.config;
 
+import com.poc.adk.commerce.customer.CustomerPreferenceRepository;
 import com.poc.adk.commerce.order.OrderRepository;
 import com.poc.adk.commerce.payment.PaymentRepository;
 import com.poc.adk.commerce.shipment.ShipmentRepository;
+import com.poc.adk.memory.CustomerPreferenceTool;
 import com.poc.adk.risk.fraud.FraudSignalRepository;
 import com.poc.adk.tools.FraudSignalTool;
 import com.poc.adk.tools.OrderLookupTool;
@@ -32,5 +34,10 @@ public class ToolIntegrationConfig {
   @Bean
   FraudSignalTool fraudSignalTool(FraudSignalRepository fraudSignals) {
     return new FraudSignalTool(fraudSignals);
+  }
+
+  @Bean
+  CustomerPreferenceTool customerPreferenceTool(CustomerPreferenceRepository preferences) {
+    return new CustomerPreferenceTool(preferences);
   }
 }

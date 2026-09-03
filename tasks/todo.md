@@ -235,13 +235,13 @@ mvn compile exec:java
 **Description:** Long-term preference lookup reads `customer_id` from session state (`ToolContext`), not from the user message.
 
 **Acceptance criteria:**
-- [ ] `CustomerPreferenceTool` returns EMAIL for CUST-1001 and SMS for CUST-1002 from H2 via its own Spring bean + `CustomerPreferenceRepository` (preference repo lives in `commerce/customer/`)
-- [ ] Tool does not parse customer id from chat text
+- [x] `CustomerPreferenceTool` returns EMAIL for CUST-1001 and SMS for CUST-1002 from H2 via its own Spring bean + `CustomerPreferenceRepository` (preference repo lives in `commerce/customer/`)
+- [x] Tool does not parse customer id from chat text
 
 **Verification:**
-- [ ] Tests pass: Layer 0 preference assertions (same `ToolEvalTest` or a focused test)
-- [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: n/a until Task 19
+- [x] Tests pass: Layer 0 preference assertions (same `ToolEvalTest` or a focused test)
+- [x] Build succeeds: `mvn -q test`
+- [x] Manual check: n/a until Task 19
 
 **Dependencies:** Task 5
 

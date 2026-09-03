@@ -81,7 +81,7 @@ Index only. Full acceptance criteria, verification, dependencies, and files are 
 - [x] Task 6: `model-routing`
 - [x] Task 7: `observability`
 - [x] Task 8: `shared-tools` + Layer 0
-- [ ] Task 9: `memory-services`
+- [x] Task 9: `memory-services`
 - [ ] Task 10: `guardrails`
 - [ ] Task 11a: Policy markdown fixtures
 - [ ] Task 11b: Chunking + `EmbeddingClient`
