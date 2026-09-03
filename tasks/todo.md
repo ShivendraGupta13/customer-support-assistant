@@ -155,14 +155,14 @@ mvn compile exec:java
 **Description:** One config property selects the ADK `BaseLlm`. Agents never hard-code a vendor. Confirm 1.9.0 builder APIs from Javadoc when writing (`spec.md` Boundaries → Always).
 
 **Acceptance criteria:**
-- [ ] `llm.provider` switches `ollama` | `gemini` | `anthropic` | `openrouter` via `ModelFactory` + `ModelRoutingProperties`
-- [ ] Default is Ollama `qwen2.5:7b` at `http://localhost:11434/v1/` as in spec
-- [ ] `ModelFactory` is reachable via `LlmContext` (agents are not Spring beans). `LlmContext` is populated by a `@Bean` during context refresh, not an `ApplicationRunner`. Unit test covers the enum switch with no network
+- [x] `llm.provider` switches `ollama` | `gemini` | `anthropic` | `openrouter` via `ModelFactory` + `ModelRoutingProperties`
+- [x] Default is Ollama `qwen2.5:7b` at `http://localhost:11434/v1/` as in spec
+- [x] `ModelFactory` is reachable via `LlmContext` (agents are not Spring beans). `LlmContext` is populated by a `@Bean` during context refresh, not an `ApplicationRunner`. Unit test covers the enum switch with no network
 
 **Verification:**
-- [ ] Tests pass: `ModelFactory` unit test
-- [ ] Build succeeds: `mvn -q test`
-- [ ] Manual check: provider switch (Playbook D11) is Task 12
+- [x] Tests pass: `ModelFactory` unit test
+- [x] Build succeeds: `mvn -q test`
+- [x] Manual check: provider switch (Playbook D11) is Task 12
 
 **Dependencies:** Task 3, Task 5
 

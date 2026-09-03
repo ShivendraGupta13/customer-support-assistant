@@ -304,13 +304,13 @@ client.queryAsync(QueryPoints.newBuilder()
 
 ## 5. Model Routing — D11
 
-`OpenAiCompatibleLlm`, `Gemini`, and `Claude` all extend `com.google.adk.models.BaseLlm` [[8]](#references). `ModelFactory.create(ModelRoutingProperties)` switches on `llm.provider` and returns a `BaseLlm`, so no agent code changes when the provider changes.
+`Gemini` and `Claude` extend `com.google.adk.models.BaseLlm` [[8]](#references). ADK **1.9.0** has no `OpenAiCompatibleLlm` yet (PR [#1202](https://github.com/google/adk-java/pull/1202) still open); Ollama/OpenRouter use a thin local `ChatCompletionsLlm` over ADK's `ChatCompletionsHttpClient`. `ModelFactory.create(ModelRoutingProperties)` switches on `llm.provider` and returns a `BaseLlm`, so no agent code changes when the provider changes.
 
 ```mermaid
 flowchart TD
     Cfg[llm.provider] --> MF[ModelFactory]
-    MF -->|ollama| OA[OpenAI-compat local]
-    MF -->|openrouter| OR[OpenAI-compat cloud]
+    MF -->|ollama| OA[ChatCompletions local]
+    MF -->|openrouter| OR[ChatCompletions cloud]
     MF -->|gemini| GE[Gemini]
     MF -->|anthropic| CL[Claude]
     OA --> Agent[LlmAgent]
@@ -319,9 +319,9 @@ flowchart TD
     CL --> Agent
 ```
 
-- Ollama: `OpenAiCompatibleLlm` at `http://localhost:11434/v1/`, model `qwen2.5:7b`.
+- Ollama: `ChatCompletionsLlm` at `http://localhost:11434/v1/`, model `qwen2.5:7b`.
 - OpenRouter: same class, `openrouter.ai/api/v1/`, `Authorization` header.
-- Gemini: `Gemini.builder().modelName(...)`. Anthropic: `new Claude(modelName, AnthropicOkHttpClient...)`. Exact builder methods are confirmed against `google-adk` **1.9.0** Javadoc when `ModelFactory` is written (`spec.md` → Boundaries → Always) — not an architecture unknown.
+- Gemini: `Gemini.builder().modelName(...).apiKey(...).build()`. Anthropic: `new Claude(modelName, AnthropicOkHttpClient.builder().apiKey(...).build())`. Confirmed against `google-adk` **1.9.0** source (`spec.md` → Boundaries → Always).
 
 ---
 
@@ -629,7 +629,7 @@ Exact Qdrant image tag (≥ 1.15.2), Maven dependency versions, and prompt file 
 5. Ollama `nomic-embed-text` model card / Nomic documentation (`docs.nomic.ai/atlas/embeddings-and-retrieval/text-embedding`) — 768 dimensions.
 6. Qdrant `documentation/search/text-search/` and `text-search/full-text-search/` — filters vs. queries, BM25 via sparse vectors.
 7. Qdrant `documentation/search/hybrid-queries/` and `QueryFactory` API (`qdrant.github.io/java-client`) — `PrefetchQuery` + `rrf(Rrf)`.
-8. `adk.dev/api-reference/java/com/google/adk/models/` — `BaseLlm`, `OpenAiCompatibleLlm` (`google/adk-java#1202`), `Claude`.
+8. `adk.dev/api-reference/java/com/google/adk/models/` — `BaseLlm`, `ChatCompletionsHttpClient`, `Claude`, `Gemini`. `OpenAiCompatibleLlm` is not in 1.9.0 (`google/adk-java#1202`).
 9. `SequentialAgent`, `ParallelAgent`, `LoopAgent` API references (`adk.dev/api-reference/java/com/google/adk/agents/`) — composition rules, `outputKey`/`{key}` chaining.
 10. `google/adk-docs` — `docs/agents/multi-agents.md` — `transfer_to_agent`, `AutoFlow`, `find_agent`.
 11. `google/adk-docs` — `docs/tools-custom/confirmation.md` — dynamic threshold confirmation pattern.
