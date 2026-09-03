@@ -10,7 +10,7 @@ This is the manual test script for every feature built in this project.
 
 **Traceability:** each scenario lists the **POC topics** it proves (from `Google ADK Java POC.md`) and the **Architecture** diagram IDs (from `architecture.md`). Start with **D0** for the whole-system view; per-scenario IDs show *why* that query's runtime behaves that way.
 
-**Architecture diagrams** (built next; IDs fixed here so cross-references don't drift):
+**Architecture diagrams** (IDs in `architecture.md`):
 
 
 | ID  | Diagram                                                           |
@@ -23,7 +23,7 @@ This is the manual test script for every feature built in this project.
 | D5  | Human-in-the-Loop (`ToolConfirmation` dialog) runtime path        |
 | D6  | Loop Agent refinement runtime path                                |
 | D7  | RAG retrieval runtime path (policy Q&A with citations)            |
-| D8  | Memory architecture data flow (short/long-term/episodic/semantic) |
+| D8  | Memory architecture data flow (short-term / long-term / semantic) |
 | D9  | Guardrails callback pipeline (input/output)                       |
 | D10 | Observability pipeline (OTel span propagation → Langfuse)         |
 | D11 | Model routing / provider switching                                |
@@ -70,7 +70,17 @@ mvn compile exec:java \
 1. Open `http://localhost:8000` and confirm the agent dropdown lists every `demo-*` agent from the Capability Map.
 2. Check app logs: H2 seed data loaded (seed count) and policy documents embedded into Qdrant (collection populated).
 
+### Session identity (Playbook §8)
 
+Long-term personalization uses `customer_id` in **initial `session.state`** at session creation — not inferred from chat text.
+
+| Goal | Action |
+| ---- | ------ |
+| Run as Priya | New session with `{"customer_id": "CUST-1001"}` |
+| Run as Alex | **Another** new session with `{"customer_id": "CUST-1002"}` |
+| Change customer | New session (do not switch mid-session) |
+
+Exact REST path: `plan.md` ADK session spike (indicative pattern in `spec.md` → Memory → Session identity). Send §8 queries on the returned `session_id` via `/run` or `/run_sse`. If the Web UI cannot set initial state, use REST for §8.
 
 ### Canonical seed data
 
@@ -79,12 +89,12 @@ Used by every scenario below so results are reproducible.
 
 | Entity             | Id                                                                               | Key facts                                                                                                                                                         |
 | ------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Customer           | `CUST-1001` (Priya Shah)                                                         | Loyalty: GOLD. Prefers contact by email.                                                                                                                          |
+| Customer           | `CUST-1001` (Priya Shah)                                                         | Loyalty: GOLD. Prefers contact by **email**.                                                                                                                      |
 | Order              | `ORD-5001` (Priya Shah)                                                          | Wireless Headphones, USD 129.99, status **DELAYED**.                                                                                                              |
 | Payment            | `PAY-9001`                                                                       | For `ORD-5001`, captured, credit card.                                                                                                                            |
 | Shipment           | `SHP-7001`                                                                       | For `ORD-5001`, carrier SwiftShip, **IN_TRANSIT_DELAYED**, 6 days past expected delivery.                                                                         |
-| Ticket             | `TCK-3001`                                                                       | Priya's past ticket on `ORD-5001`, category `shipping_delay`, status RESOLVED (store credit issued).                                                              |
-| Customer           | `CUST-1002` (Alex Kim)                                                           | Loyalty: SILVER.                                                                                                                                                  |
+| Ticket             | `TCK-3001`                                                                       | Priya's past ticket on `ORD-5001` (domain data — not a memory demo).                                                                                              |
+| Customer           | `CUST-1002` (Alex Kim)                                                           | Loyalty: SILVER. Prefers contact by **SMS**.                                                                                                                        |
 | Order              | `ORD-5010` (Alex Kim)                                                            | Wireless Headphones, USD 350.00, refund requested. Amount is **above** the USD 200 auto-approval threshold, so HITL must fire.                                    |
 | Order              | `ORD-5002` (Alex Kim)                                                            | Flagged by fraud signal `MULTIPLE_SHIPPING_ADDRESSES`, score 0.82.                                                                                                |
 | Policy docs        | `refund-policy.md`, `shipping-policy.md`, `fraud-policy.md`, `loyalty-policy.md` | Markdown with `##` sections, chunked and embedded into Qdrant.                                                                                                    |
@@ -226,15 +236,17 @@ A fluent answer that cites shipping-policy weather text and never mentions `NW-S
 
 ## 8. Memory Personalization — `demo-memory-personalization`
 
-**POC topics:** Long-Term Memory (preferences, cross-session recall), Episodic Memory (past interactions). Short-term is §1; semantic is §7; D8 is the memory comparison / data-flow diagram for all four types.
+**POC topics:** Long-Term Memory (preferences, cross-session recall). Short-term is §1; semantic is §7; D8 is the memory comparison diagram for all three types.
 
 **Architecture:** D8, D9, D10.
 
+**Setup:** follow [Session identity (Playbook §8)](#session-identity-playbook-8) above — one `customer_id` per new session.
 
-| Step | Query                                                                                                                 | Expected                                                                                                                                                                                                                                                                           |
-| ---- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1    | New session, *"What's the best way to reach me, and have I contacted support before about ORD-5001?"*, as `CUST-1001` | Response recalls the long-term preference (email) and the past ticket `TCK-3001` (shipping delay, resolved with store credit) — **without** that information being in the current session's conversation history, proving it came from persistent storage, not short-term context. |
-| 2    | *"Have I had any fraud flags?"*, as `CUST-1002`                                                                       | Recalls the `ORD-5002` fraud signal from a prior/separate context — episodic recall check.                                                                                                                                                                                         |
+
+| Step | Session `customer_id` | Query | Expected |
+| ---- | --------------------- | ----- | -------- |
+| 1 | `CUST-1001` | *"What's the best way to reach me?"* | Response recalls long-term preference **email** from H2 — **without** that information in the current conversation history (proves persistent storage, not short-term context). |
+| 2 | `CUST-1002` (new session) | *"What's the best way to reach me?"* | Response recalls **SMS** — confirms changing customer = new session with different `customer_id`. |
 
 
 

@@ -1,12 +1,12 @@
 # Architecture: Customer Support Investigation Assistant
 
-Status: **DRAFT — for review**
+Status: **APPROVED**
 
 This document describes *how* the system in `spec.md` is built: process topology, package/class structure, data schemas, and the runtime path each Playbook scenario takes. It does not restate product requirements, seed data, or acceptance criteria — see `spec.md` and `playbook.md` for those. Diagram IDs (`D0`–`D12`) match the table in `playbook.md` exactly so Playbook scenarios can cross-reference them.
 
 Diagrams use short labels; the surrounding prose holds the detail. Every ADK/Qdrant/Langfuse API fact below was verified against current official sources before being written down (per `spec.md` → Boundaries → Always). Citations are consolidated in [References](#references).
 
-**Stack lock (this review):** the app stays local (no GCP/AWS deploy). Embeddings, guardrails, observability, and vector search stay on the local stack. Hybrid retrieval is **BM25 + semantic dense**, fused with RRF — not two semantic models. Vertex AI Vector Search was considered and rejected (see [§8](#8-key-architecture-decisions)).
+**Stack lock:** the app stays local (no GCP/AWS deploy). Embeddings, guardrails, observability, and vector search stay on the local stack. Hybrid retrieval is **BM25 + semantic dense**, fused with RRF — not two semantic models. Vertex AI Vector Search was considered and rejected (see [§8](#8-key-architecture-decisions)).
 
 ---
 
@@ -73,7 +73,7 @@ Step 3 must complete before step 5 can serve a request: agent classes are loaded
 
 `AdkWebServer` declares `@Bean public BaseSessionService sessionService()`, `@Bean public BaseArtifactService artifactService()`, and `@Bean public BaseMemoryService memoryService()`, all returning `InMemory*` implementations [[2]](#references). Spring Boot rejects a second bean definition with the same name by default, so `com.poc.adk` **must not** declare beans named `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` (already stated as a boundary in `spec.md`).
 
-**Consequence for memory architecture:** our H2-backed long-term/episodic memory and Qdrant-backed semantic memory are **not** wired through ADK's `BaseMemoryService` SPI — that stays the default `InMemoryMemoryService`, unused by our agents. Instead, `memory-services` is a package of plain Java services invoked as **function tools** (`CustomerPreferenceTool`, `TicketHistoryTool`), reached via `AppServices`, exactly as the Capability Map already models them (tools, not a memory-service override). Short-term memory therefore also runs on ADK's default `InMemorySessionService` — acceptable per `spec.md` (single-instance POC; short-term memory is not required to survive a restart).
+**Consequence for memory architecture:** our H2-backed long-term memory and Qdrant-backed semantic memory are **not** wired through ADK's `BaseMemoryService` SPI — that stays the default `InMemoryMemoryService`, unused by our agents. Instead, `memory-services` is a package of plain Java services invoked as **function tools** (`CustomerPreferenceTool`), reached via `AppServices`, exactly as the Capability Map models them (tools, not a memory-service override). Short-term memory runs on ADK's default `InMemorySessionService` — acceptable per `spec.md` (single-instance POC; short-term memory is not required to survive a restart).
 
 ### 2.3 HITL `FunctionResponse` shape — resolved
 
@@ -94,7 +94,7 @@ Per ADK's confirmation contract [[4]](#references), resuming a paused tool call 
 
 ### 2.4 Embedding dimension — resolved
 
-`nomic-embed-text` (Ollama) is documented at **768 dimensions** [[5]](#references). Both Qdrant collections below use `size=768, distance=Cosine`. `EmbeddingClient` asserts `vector.length == 768` on its first call at startup and fails fast on mismatch, replacing the ad hoc `curl` check.
+`nomic-embed-text` (Ollama) is documented at **768 dimensions** [[5]](#references). The `policy_chunks` collection uses `size=768, distance=Cosine` for the dense vector. `EmbeddingClient` asserts `vector.length == 768` on its first call at startup and fails fast on mismatch, replacing the ad hoc `curl` check.
 
 ---
 
@@ -120,14 +120,13 @@ src/main/java/com/poc/adk/
     OrderLookupTool.java, PaymentHistoryTool.java, ShipmentTrackingTool.java, FraudSignalTool.java
     RefundTool.java               // HITL threshold check inside the method body — see 2.3 / D5
   memory/
-    CustomerPreferenceTool.java   // long-term
-    TicketHistoryTool.java        // episodic
+    CustomerPreferenceTool.java   // long-term — reads customer_id from session.state
   guardrails/
     InputGuardrailCallback.java   // BeforeModelCallback
     OutputGuardrailCallback.java  // AfterModelCallback
     PiiMasker.java, PromptInjectionHeuristics.java, GuardrailAuditService.java
   rag/
-    ChunkingService.java          // ## / ### header split, ~400-token cap, ~200-char overlap
+    ChunkingService.java          // ## / ### header split, ~400-token cap, ~50-token overlap on size-splits
     EmbeddingClient.java          // Ollama /api/embeddings HTTP, asserts 768-dim
     HybridRetriever.java          // dense prefetch + BM25 prefetch + RRF in one queryAsync
     CitationFormatter.java
@@ -242,7 +241,7 @@ erDiagram
 
 ### 4.2 Qdrant collections
 
-One collection. Semantic memory in this POC **is** that collection — the four policy files are the facts / business rules (Playbook §7). There is no second Qdrant corpus and no `semantic_memory` collection. Playbook §8 (preferences / past tickets) is H2 by `customer_id`, not vector similarity.
+One collection. Semantic memory in this POC **is** that collection — the four policy files are the facts / business rules (Playbook §7). There is no second Qdrant corpus and no `semantic_memory` collection. Playbook §8 (customer preferences) is H2 by `customer_id` from `session.state`, not vector similarity.
 
 | Collection | Vectors | Payload | Purpose |
 |---|---|---|---|
@@ -439,23 +438,50 @@ flowchart TD
 
 ### 6.8 Memory Architecture — D8
 
-Long-term and episodic lookups are relational queries by `customer_id` / `order_id` — no embedding similarity is required for them in `spec.md` / `playbook.md`.
+Episodic memory is **descoped** — no ticket-history memory tool. `Ticket` rows may exist as domain data; they are not a memory demo.
+
+### Comparison matrix (Northwind)
+
+| Memory type | Northwind example | Store | Access in this POC |
+|---|---|---|---|
+| **Short-term** | "Who is it for?" → `ORD-5001` from prior turn | ADK `InMemorySessionService` | `session.state` + conversation — Playbook §1 |
+| **Long-term** | Contact preference **email** (stable trait) | H2 `CustomerPreference` | `CustomerPreferenceTool` — Playbook §8 |
+| **Semantic** | Refund window from policy docs | Qdrant `policy_chunks` | `HybridRetriever` — Playbook §7 |
+
+### Session identity (`customer_id`)
+
+Long-term personalization binds **one customer per session** via initial `session.state`:
+
+| Step | Action |
+|---|---|
+| Create session | Set `{"customer_id": "CUST-1001"}` (or `CUST-1002`) in initial state |
+| Run query | User message does **not** include customer id — Playbook §8 |
+| Tool path | `CustomerPreferenceTool` reads `customer_id` from `ToolContext` / session state |
+| Change customer | **New session** with a different `customer_id` |
+
+Exact REST path for session creation is confirmed in `plan.md` (ADK 1.9.x session spike). Indicative:
+
+```bash
+curl -s -X POST "http://localhost:8000/<session-endpoint-from-spike>" \
+  -H "Content-Type: application/json" \
+  -d '{"state": {"customer_id": "CUST-1001"}}'
+```
+
+Layer 3: `InMemoryRunner` sets the same initial state. If the Web UI cannot set state, §8 uses REST or a fallback `bind_customer` tool (plan spike).
 
 ```mermaid
 flowchart LR
     Agent[Agent / tools]
     Agent --> ST[Short-term]
     Agent --> LT[Long-term]
-    Agent --> EP[Episodic]
     Agent --> SE[Semantic]
 ```
 
 | Type | Store | Contents | Access |
 |---|---|---|---|
 | Short-term | ADK `InMemorySessionService` | Conversation turns | `session.state` |
-| Long-term | H2 `CustomerPreference` | `preferred_contact_channel` | `CustomerPreferenceTool` |
-| Episodic | H2 `Ticket` | Past tickets | `TicketHistoryTool` |
-| Semantic | Qdrant `policy_chunks` | Policy text (the business rules) | `HybridRetriever` |
+| Long-term | H2 `CustomerPreference` | `preferred_contact_channel` | `CustomerPreferenceTool` (`customer_id` from session state) |
+| Semantic | Qdrant `policy_chunks` | Policy text (business rules) | `HybridRetriever` |
 
 ---
 
@@ -524,11 +550,11 @@ L0–L1: no LLM. L2–L3: LLM, temperature 0. L4: manual Web UI. Localize the fa
 | 3 | Stay on **local** Qdrant. Do not use Vertex AI Vector Search (or other cloud vector DBs) | Same hybrid algorithm, extra GCP index/endpoint/IAM/always-on replicas. Does not simplify the Playbook retrieval test |
 | 4 | Embeddings, guardrails, and observability stay local (Ollama `nomic-embed-text`, ADK callbacks, OTel → Langfuse). App is not deployed to GCP/AWS | Cloud services here add credentials and network without teaching more ADK. Langfuse is a named POC topic |
 | 5 | `ParallelAgent` / `LoopAgent` / `SequentialAgent` are each wrapped in (or are) a `SequentialAgent` root, with follow-up `LlmAgent`s as siblings reading `outputKey` | These workflow agents never hand control back to a parent `LlmAgent` [[9]](#references) |
-| 6 | Long-term and episodic memory are tools over H2, not `BaseMemoryService`. Semantic memory is RAG over `policy_chunks` | `AdkWebServer` hard-codes `InMemoryMemoryService`; overriding the bean name collides — see [§2.2](#22-bean-name-collision--resolved) |
+| 6 | Long-term memory is a tool over H2 (`CustomerPreferenceTool`), not `BaseMemoryService`. Semantic memory is RAG over `policy_chunks`. Episodic descoped | `AdkWebServer` hard-codes `InMemoryMemoryService`; overriding the bean name collides — see [§2.2](#22-bean-name-collision--resolved) |
 | 7 | Agent classes reach Spring-managed infra via a static `AppServices` holder | `CompiledAgentLoader` finds a static field; `@Autowired` is unavailable |
 | 8 | Dynamic routing uses `subAgents()` + implicit `transfer_to_agent`, not explicit `AgentTool` wrapping | Coordinator/Specialist with the least code [[10]](#references) |
 | 9 | HITL threshold check lives inside the tool method body, not a static `requireConfirmation` flag | $200 threshold is data-dependent [[11]](#references) |
-| 10 | Semantic memory = `policy_chunks` only. No second Qdrant collection | Spec/playbook never define a separate fact corpus. Policy files already are the business rules; §8 memory is H2 |
+| 10 | Semantic memory = `policy_chunks` only. No second Qdrant collection | Spec/playbook never define a separate fact corpus. Policy files already are the business rules; §8 long-term memory is H2 preferences |
 
 ---
 

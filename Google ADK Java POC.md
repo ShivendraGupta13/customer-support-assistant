@@ -77,12 +77,6 @@ Goals:
 - User preferences
 - Cross-session recall
 
-### Episodic Memory
-
-- Previous task execution
-- Past interactions
-- Experience retrieval
-
 ### Semantic Memory
 
 - Facts
@@ -111,8 +105,9 @@ Memory comparison matrix
 | ----------- | ------------- | ----------- | -------------------------- |
 | Short-Term  | Conversation  | Session     | In-memory                  |
 | Long-Term   | User Profile  | Persistent  | DB                         |
-| Episodic    | Past Tasks    | Persistent  | DB                         |
 | Semantic    | Facts & Rules | Persistent  | Vector DB / Knowledge Base |
+
+> **This POC:** episodic memory (past interaction recall as a separate type) is **descoped**. Support tickets remain domain data in H2 where needed; long-term preferences + RAG cover the memory learning goals.
 
 
 ---
@@ -177,7 +172,6 @@ Customer Support Investigation Assistant implementing:
 - Tool calling
 - Short-Term Memory
 - Long-Term Memory
-- Episodic Memory
 - Semantic Memory
 - RAG
 - Guardrails
@@ -203,7 +197,6 @@ Customer Support Investigation Assistant implementing:
 | Tool Calling        | Enterprise APIs      | Low        | Yes              | Static logic             |
 | Short-Term Memory   | Chat                 | Low        | Yes              | One-shot APIs            |
 | Long-Term Memory    | Personalization      | Medium     | Yes              | Stateless systems        |
-| Episodic Memory     | Support history      | Medium     | Yes              | No historical context    |
 | Semantic Memory     | Knowledge            | Medium     | Yes              | Tiny static data         |
 | RAG                 | Enterprise search    | Medium     | Yes              | Small knowledge base     |
 | Guardrails          | Safety               | Medium     | Mandatory        | Internal prototypes only |

@@ -6,7 +6,7 @@ Build a single Spring Boot / Maven application as the interaction surface for le
 
 - Agent workflows (sequential / parallel / loop / routing / HITL)
 - Multi-agent composition and tool calling
-- All four memory types, RAG, guardrails
+- Three memory types (short-term, long-term, semantic), RAG, guardrails
 - Observability (OTel + Langfuse) and evaluation
 
 Our own `@SpringBootApplication` scans both `com.poc.adk` and ADK's `com.google.adk.web` (from `google-adk-dev`), so the Dev UI and REST API come up in our context. One concrete business scenario teaches all of the above.
@@ -37,7 +37,7 @@ This is a **technology-learning POC**, not a production system.
 | Agent framework  | `google-adk` + `google-adk-dev` (currently 1.9.x)                                                                                                                                                                                          | Core agents/tools/workflows + dev web server & REST API.                                                                                                                                                                                                                                                               |
 | Default LLM      | Ollama, `qwen2.5:7b`, via ADK's built-in `OpenAiCompatibleLlm`                                                                                                                                                                             | Ollama must already be running locally (`ollama serve`, model pulled) — out of scope for us to install.                                                                                                                                                                                                                |
 | Alternate LLMs   | Gemini (native ADK `Gemini` model class), Anthropic (native ADK `Claude` model class), OpenRouter (via `OpenAiCompatibleLlm`)                                                                                                              | Switchable via one config property, no code change.                                                                                                                                                                                                                                                                    |
-| Relational store | H2 (file-mode, persisted to disk, not in-memory-only)                                                                                                                                                                                      | Sufficient for a single-instance POC: mock domain data, long-term/episodic memory, guardrail & eval logs.                                                                                                                                                                                                              |
+| Relational store | H2 (file-mode, persisted to disk, not in-memory-only)                                                                                                                                                                                      | Sufficient for a single-instance POC: mock domain data, long-term memory (customer preferences), guardrail & eval logs.                                                                                                                                                                                                  |
 | Vector store     | Qdrant (Docker) via `io.qdrant:qdrant-client` (Java)                                                                                                                                                                                       | Semantic memory + RAG document embeddings.                                                                                                                                                                                                                                                                             |
 | Observability    | OpenTelemetry SDK (Java) → OTLP → Langfuse (Docker, self-hosted)                                                                                                                                                                           | Traces/spans for agent runs, tool calls, model calls; Langfuse as the trace UI + LLM-specific analytics (cost, tokens).                                                                                                                                                                                                |
 | Embeddings       | Ollama `nomic-embed-text` via a small `EmbeddingClient` (HTTP to Ollama `/api/embeddings` or the OpenAI-compatible `/v1/embeddings` endpoint). **Not** routed through ADK `BaseLlm` — that abstraction is chat completion, not embeddings. | 768-dim dense vectors. Swap the client implementation later if a cloud key is set; do not block the default path on a cloud embedder.                                                                                                                                                                                  |
@@ -54,7 +54,7 @@ Fictional store **Northwind Retail**. Synthetic data, owned entirely by us — f
 Seeded into H2:
 
 - Customer, Order, Payment, Shipment
-- Ticket (past support interactions — episodic memory substrate)
+- Ticket (support-case domain data — not a memory demo; no ticket-history memory tool)
 - Customer Preference (long-term memory substrate)
 - Fraud Signal (feeds the fraud-check specialist)
 
@@ -82,7 +82,7 @@ This request bundles many independently testable capabilities. Below is the deco
 | `model-routing`                 | `llm.provider` config + `ModelFactory` producing the right ADK `BaseLlm` (Ollama/Gemini/Anthropic/OpenRouter)                                                                        | Model configuration                                                                                        | —                                                                                 |
 | `observability`                 | OTel SDK setup, OTLP exporter to Langfuse, span/event capture around agent runs, tool calls, model calls                                                                             | Observability (traces, agent events, tool execution, token usage, latency, errors, cost, logs, metrics)    | `model-routing`                                                                   |
 | `shared-tools`                  | Java function tools wrapping domain data: order lookup, payment history, shipment tracking, fraud signal check                                                                       | Tool Calling (Java Functions, Database Tool, Custom Tools)                                                 | `domain-data`                                                                     |
-| `memory-services`               | Short-term (session state helpers), Long-term (H2-backed customer preferences), Episodic (H2-backed past tickets). Semantic memory is RAG over `policy_chunks` (`rag-index`), not a second Qdrant collection | Memory (all 4 types) + Memory comparison matrix                                                            | `domain-data`                                                                     |
+| `memory-services`               | Short-term (session state helpers), Long-term (H2-backed customer preferences via `CustomerPreferenceTool`). Semantic memory is RAG over `policy_chunks` (`rag-index`), not a second Qdrant collection | Memory (3 types) + comparison matrix — see [Memory](#memory) below and `architecture.md` §6.8 (D8) | `domain-data`                                                                     |
 | `guardrails`                    | Before/after model & tool callbacks: input/output guardrails, PII masking, prompt-injection/jailbreak heuristics, basic content moderation                                           | Guardrails (all sub-topics)                                                                                | `model-routing`                                                                   |
 | `rag-index`                     | Markdown-header chunking + dense embeddings + BM25 sparse + RRF hybrid retrieval + citation formatting                                                                               | RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation)                      | `domain-data`                                                                     |
 | `demo-single-agent`             | Single `LlmAgent` + tool calling + short-term memory — the "hello world" baseline                                                                                                    | Single Agent, Prompt management, Context window                                                            | `shared-tools`, `memory-services`, `guardrails`, `observability`, `model-routing` |
@@ -92,7 +92,7 @@ This request bundles many independently testable capabilities. Below is the deco
 | `demo-hitl-approval`            | `LlmAgent` + `ToolConfirmation` on refund above threshold (Web UI dialog for live demo)                                                                                              | Human-in-the-loop, Retry & error recovery (approve/reject paths)                                           | same infra                                                                        |
 | `demo-loop-refinement`          | `LoopAgent`: draft customer-facing reply → critique → refine until policy-compliant or `max_iterations`                                                                              | (Loop workflow, iterative self-correction — implied by "LoopAgent" in your ask)                            | same infra                                                                        |
 | `demo-rag-policy`               | Agent answering policy questions using `rag-index`, with citations                                                                                                                   | RAG end-to-end, Semantic memory                                                                            | `rag-index`                                                                       |
-| `demo-memory-personalization`   | Agent recalling long-term preferences + episodic past-ticket history across sessions                                                                                                 | Long-term memory, Episodic memory, cross-session recall                                                    | `memory-services`                                                                 |
+| `demo-memory-personalization`   | Agent recalling long-term preferences across sessions (`customer_id` in `session.state` at session create)                                                                           | Long-term memory, cross-session recall                                                                     | `memory-services`                                                                 |
 | `evaluation-harness`            | Layered JUnit harness: tool eval, retrieval eval (incl. hybrid vs dense-only), prompt eval (frozen context), agent eval (full loop)                                                  | Evaluation (golden datasets, prompt evaluation, agent evaluation, tool evaluation)                         | all `demo-*` modules, `rag-index`, `shared-tools`                                 |
 
 
@@ -128,9 +128,44 @@ mvn compile exec:java -Dexec.mainClass=com.poc.adk.SupportAssistantApplication \
 - **Spring wiring** — `ROOT_AGENT` is not a Spring bean; agent classes reach JPA/Qdrant/OTel via a static `AppServices` holder populated at startup (`ApplicationRunner`), before any request loads agent classes.
 - **Bean-name collisions** — do not define `sessionService`, `artifactService`, `memoryService`, `objectMapper`, or `mappingJackson2HttpMessageConverter` in `com.poc.adk`; `AdkWebServer` already registers them.
 
+## Memory
+
+### Comparison matrix (Northwind examples)
+
+| Memory type | Northwind example | Store | How this POC accesses it |
+| ----------- | ----------------- | ----- | ------------------------ |
+| **Short-term** | Turn 2: "Who is it for?" resolves `ORD-5001` from the prior turn | ADK `InMemorySessionService` — conversation + `session.state` | Default ADK session; Playbook §1 |
+| **Long-term** | "Best way to reach me is **email**" (stable preference) | H2 `CustomerPreference` | `CustomerPreferenceTool` reads `customer_id` from `session.state` — Playbook §8 |
+| **Semantic** | "Refund window is 30 days" from policy docs | Qdrant `policy_chunks` | `HybridRetriever` — Playbook §7 |
+
+Diagram: `architecture.md` §6.8 (D8).
+
+### Session identity (`customer_id`)
+
+Long-term personalization does **not** infer customer from chat text in Playbook §8. Bind identity once per session:
+
+1. **At session creation** — set initial `session.state`, e.g. `{"customer_id": "CUST-1001"}`.
+2. **Memory tools** — `CustomerPreferenceTool` reads `customer_id` from session state (via `ToolContext`), not from the user message.
+3. **Change customer** — create a **new session** with a different `customer_id` (same pattern as logging in as another user). Do not switch mid-session for Playbook demos.
+
+**Manual (Playbook §8):** exact REST path and body are confirmed in the Plan-phase ADK session spike (`plan.md`). Indicative pattern:
+
+```bash
+# 1. Create session for Priya (exact URL from spike)
+curl -s -X POST "http://localhost:8000/<session-endpoint-from-spike>" \
+  -H "Content-Type: application/json" \
+  -d '{"state": {"customer_id": "CUST-1001"}}'
+
+# 2. Send §8.1 query on the returned session_id via /run or /run_sse
+```
+
+**Web UI:** if the Dev UI cannot set initial state, use REST for §8 or the fallback `bind_customer(customer_id)` tool documented in `plan.md` after the spike.
+
+**Layer 3 tests:** `InMemoryRunner` sets the same initial state programmatically — no special-case agent code.
+
 ## Model Routing Config
 
-Shape to be finalized in Architecture.
+Defined in `architecture.md` §5 (D11).
 
 ### Configuration
 
@@ -173,7 +208,7 @@ Switch `llm.provider` when Langfuse shows correct tools/retrieval but prose or r
 | §5 | `demo-hitl-approval` | — (confirmation is structural) |
 | §6 | `demo-loop-refinement` | Refined apology still violates tone after `max_iterations` |
 | §7.2–7.3 | `demo-rag-policy` | `RetrievalEvalTest` passes but answer cites wrong doc or omits `source_path` / section |
-| §8 | `demo-memory-personalization` | Recalls wrong ticket/preference despite correct DB read in trace |
+| §8 | `demo-memory-personalization` | Recalls wrong preference despite correct DB read in trace |
 
 **Suggested demo flow:** build and debug on qwen → run Layers 0–3 → for stakeholders, rerun §4, §7.2–7.3, and §6 once on a cloud model.
 
@@ -183,12 +218,12 @@ Switch `llm.provider` when Langfuse shows correct tools/retrieval but prose or r
 
 - File-mode: `jdbc:h2:file:./data/support-assistant`
 - Spring Data JPA
-- Holds: relational domain data (customers / orders / payments / shipments / tickets), long-term memory (customer preferences), episodic memory (ticket history), guardrail audit log, evaluation run results
+- Holds: relational domain data (customers / orders / payments / shipments / tickets), long-term memory (customer preferences), guardrail audit log, evaluation run results
 - No policy content lives here
 
 ### Qdrant (vectors)
 
-- One collection (`policy_chunks`) for policy-document embeddings (RAG, sourced from plain-text policy files, not H2). That collection is also the semantic-memory demo (facts / business rules / policy knowledge). No second collection; long-term and episodic memory stay in H2.
+- One collection (`policy_chunks`) for policy-document embeddings (RAG, sourced from plain-text policy files, not H2). That collection is also the semantic-memory demo (facts / business rules / policy knowledge). No second collection; long-term memory stays in H2.
 - Exact collection schema is in `architecture.md` §4.2.
 
 
@@ -346,7 +381,7 @@ Run the real agent graph through `InMemoryRunner` (or `Runner` + Ollama for `@Ta
 | §5 HITL            | Event shows `adk_request_confirmation` (or pending confirmation) before refund; after programmatic `confirmed: true`, refund tool runs; after `confirmed: false`, refund tool never runs and H2 unchanged. **Live demo:** same flow via Web UI dialog, not Postman. |
 | §6 Loop            | ≥2 draft/critique iterations in events, then exit; forced-fail case hits `max_iterations`.                                                                                                                                                                          |
 | §7 RAG             | Retrieval tool or RAG span returns chunks from expected `source_path`; hybrid case cites loyalty doc for code query.                                                                                                                                                |
-| §8 Memory          | Memory-load tool or DB read occurs without those facts in the user message; reply cites `TCK-3001` / email preference.                                                                                                                                              |
+| §8 Memory          | `customer_preference` tool or DB read for `customer_id` from session state; reply states email (CUST-1001) or SMS (CUST-1002) without those facts in the user message. |
 
 For flaky routing tests, use `TestLlm` to return a fixed `transfer_to_agent` response so Layer 3 can verify graph wiring without depending on qwen2.5:7b mood.
 
@@ -376,7 +411,7 @@ Only then change the prompt file and re-run Layer 2, then Layer 3.
 
 ## Project Structure
 
-Indicative layout — finalized in Architecture.
+Indicative layout — see `architecture.md` §3.
 
 ```
 pom.xml
@@ -385,7 +420,7 @@ src/main/java/com/poc/adk/
   config/       → model-routing, observability, qdrant, data-seed config
   domain/       → JPA entities, repositories, seed loader
   tools/        → shared Java function tools
-  memory/       → long-term and episodic tools (H2); semantic memory is `rag/` over policy_chunks
+  memory/       → long-term preference tool (H2); semantic memory is `rag/` over policy_chunks
   guardrails/   → callbacks + PII/prompt-injection utilities
   rag/          → chunking, embedding, retrieval (dense + lexical + RRF), citation formatting
   agents/
@@ -438,10 +473,6 @@ data/           → H2 file-mode database (gitignored)
 - Layers 0–1 of the evaluation harness pass with no LLM (`ToolEvalTest`, `RetrievalEvalTest` including hybrid vs dense-only)
 - Layers 2–3 pass against the default Ollama provider (`PromptEvalTest`, `EvaluationHarnessTest`) without asserting exact prose
 
-### Remaining verification for Architecture
+### Architecture verification (resolved)
 
-Spikes to confirm the spec works on ADK 1.9.x:
-
-- **Bean-name collision** — no collision when scanning `AdkWebServer`'s package (see Application Bootstrap).
-- **HITL `FunctionResponse` shape** — exact JSON for `InMemoryRunner` (`ToolConfirmation`, not `LongRunningFunctionTool`; see Capability Map `demo-hitl-approval` and Playbook §5).
-- **Embeddings dimension** — one `curl` confirming `nomic-embed-text` returns 768-dim vectors (Ollama HTTP via `EmbeddingClient`; see Tech Stack Embeddings row).
+Bean-name collision, HITL `FunctionResponse` shape, and embedding dimension are resolved in `architecture.md` §2.2–2.4. Embedding dimension is asserted at startup by `EmbeddingClient`, not ad hoc `curl`.
