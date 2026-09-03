@@ -65,11 +65,19 @@ public final class RefundTool {
   }
 
   private Map<String, Object> executeRefund(Order order) {
-    Payment payment =
-        payments
-            .findByOrderId(order.getId())
-            .orElseThrow(
-                () -> new IllegalStateException("No payment for order " + order.getId()));
+    Payment payment = payments.findByOrderId(order.getId()).orElse(null);
+    if (payment == null) {
+      return Map.of(
+          "status", "error",
+          "order_id", order.getId(),
+          "message", "No payment found for order");
+    }
+    if ("REFUNDED".equals(payment.getStatus())) {
+      return Map.of(
+          "status", "already_refunded",
+          "order_id", order.getId(),
+          "amount", order.getAmount());
+    }
     payment.setStatus("REFUNDED");
     payments.save(payment);
     return Map.of(

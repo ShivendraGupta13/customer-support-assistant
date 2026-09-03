@@ -9,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Dense embeddings via Ollama {@code POST /api/embed}. Not routed through ADK {@code BaseLlm}.
@@ -22,7 +21,6 @@ public final class EmbeddingClient {
   private final URI embedUri;
   private final String model;
   private final int expectedDimension;
-  private final AtomicBoolean dimensionChecked = new AtomicBoolean(false);
 
   public EmbeddingClient(String baseUrl, String model, int expectedDimension) {
     this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(), baseUrl, model, expectedDimension);
@@ -77,7 +75,7 @@ public final class EmbeddingClient {
   }
 
   private void assertDimension(float[] vector) {
-    if (dimensionChecked.compareAndSet(false, true) && vector.length != expectedDimension) {
+    if (vector.length != expectedDimension) {
       throw new IllegalStateException(
           "Expected " + expectedDimension + "-dim embedding, got " + vector.length);
     }
