@@ -61,10 +61,7 @@ graph TD
    ```
 
 4. **Access the Agent UI & Dashboards**:
-   - **ADK Agent Dev UI**: [http://localhost:8000](http://localhost:8000) (verify that all eight `demo-*` agents appear in the application dropdown)
-   - **H2 Database Console**: [http://localhost:8000/h2-console](http://localhost:8000/h2-console) (JDBC URL: `jdbc:h2:file:./data/support-assistant`, User: `sa`, blank password)
-   - **Qdrant Vector Dashboard**: [http://localhost:6333/dashboard](http://localhost:6333/dashboard)
-   - **Langfuse Telemetry UI**: [http://localhost:3000](http://localhost:3000)
+   Open the [ADK Agent Dev UI](http://localhost:8000) and verify that all eight `demo-*` agents appear in the application dropdown. For H2, Qdrant, Langfuse, and other web consoles, see [Dashboards & Web Consoles](#-dashboards--web-consoles).
 
 5. **Run Manual Scenarios**:
    Follow the step-by-step test scenarios in [docs/playbook.md](docs/playbook.md).
@@ -87,13 +84,11 @@ graph TD
 
 ### 🖥️ Dashboards & Web Consoles
 
-| Service / Dashboard | URL | Credentials / Connection Details | Description |
-| :--- | :--- | :--- | :--- |
-| **ADK Agent Dev UI** | [http://localhost:8000](http://localhost:8000) | *None* | Interactive agent chat interface, session inspection, and HITL approval dialogs |
-| **H2 Database Console** | [http://localhost:8000/h2-console](http://localhost:8000/h2-console) | **JDBC URL**: `jdbc:h2:file:./data/support-assistant`<br>**User**: `sa`<br>**Password**: *(empty)* | Browse and query domain tables (`ORDER`, `CUSTOMER`, `PAYMENT`, `SHIPMENT`, `TICKET`), customer preferences, and guardrail audit logs |
-| **Qdrant Vector Dashboard** | [http://localhost:6333/dashboard](http://localhost:6333/dashboard) | *None* (REST `:6333`, gRPC `:6334`) | Inspect collections (`policy_chunks`), vector counts, payload points, and run test vector queries |
-| **Langfuse Telemetry UI** | [http://localhost:3000](http://localhost:3000) | Sign up on first visit (local instance) | Trace multi-agent execution spans, LLM generations, latency, token usage, and guardrail decisions |
-| **Ollama Service** | [http://localhost:11434](http://localhost:11434) | *None* | Local LLM inference server (`qwen2.5:7b` chat and `nomic-embed-text` embeddings) |
+#### 🤖 ADK Agent Dev UI
+1. Ensure the application is running (`mvn compile exec:java`).
+2. Open [http://localhost:8000](http://localhost:8000) — no credentials required.
+3. Use the interactive agent chat interface, session inspection, and HITL approval dialogs.
+4. Verify that all eight `demo-*` agents appear in the application dropdown.
 
 #### 🗄️ H2 Database Web Console
 1. Ensure the application is running (`mvn compile exec:java`).
@@ -104,7 +99,8 @@ graph TD
    - **JDBC URL**: `jdbc:h2:file:./data/support-assistant`
    - **User Name**: `sa`
    - **Password**: *(leave blank)*
-4. Useful verification queries:
+4. Browse domain tables (`ORDER`, `CUSTOMER`, `PAYMENT`, `SHIPMENT`, `TICKET`), customer preferences, and guardrail audit logs.
+5. Useful verification queries:
    ```sql
    SELECT * FROM "ORDER";
    SELECT * FROM CUSTOMER_PREFERENCE;
@@ -113,8 +109,8 @@ graph TD
 
 #### 🔍 Qdrant Vector Dashboard
 1. Ensure Docker Compose is up (`docker compose up -d`).
-2. Navigate to [http://localhost:6333/dashboard](http://localhost:6333/dashboard).
-3. Click on the `policy_chunks` collection to view indexed policy documents, vector configurations, payload metadata, or test hybrid search.
+2. Navigate to [http://localhost:6333/dashboard](http://localhost:6333/dashboard) — no credentials required (REST `:6333`, gRPC `:6334`).
+3. Inspect the `policy_chunks` collection: vector counts, payload points, indexed policy documents, and hybrid search.
 4. REST API status: [http://localhost:6333/collections](http://localhost:6333/collections).
 
 #### 📊 Langfuse Observability UI
@@ -122,6 +118,12 @@ graph TD
 2. Open [http://localhost:3000](http://localhost:3000) and create a local account on first login.
 3. Create a project and obtain your API keys from **Project Settings > API Keys**.
 4. Configure keys to view trace spans and LLM telemetry (see below).
+5. Trace multi-agent execution spans, LLM generations, latency, token usage, and guardrail decisions.
+
+#### 🦙 Ollama Service
+1. Ensure Ollama is running (`ollama serve`).
+2. Service endpoint: [http://localhost:11434](http://localhost:11434) — no credentials required.
+3. Serves `qwen2.5:7b` (chat) and `nomic-embed-text` (embeddings).
 
 ### Telemetry / Tracing Configuration
 

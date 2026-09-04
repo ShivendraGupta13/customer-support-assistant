@@ -73,7 +73,7 @@ public final class ParallelInvestigationAgent {
                 auditService)
             .build();
 
-    ParallelAgent fanOut =
+      ParallelAgent fanOut =
         ParallelAgent.builder()
             .name("risk_fanout")
             .description("Concurrent payment, shipment, and fraud checks")

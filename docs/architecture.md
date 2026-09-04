@@ -505,10 +505,12 @@ Long-term personalization binds **one customer per session** via initial `sessio
 Exact REST path (ADK **1.9.0** `SessionController`): see `tasks/plan.md` → Spike findings.
 
 ```bash
-curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/user/sessions" \
   -H "Content-Type: application/json" \
   -d '{"state": {"customer_id": "CUST-1001"}}'
 ```
+
+Use `userId` `user` (ADK Dev UI default). Curl-created sessions must be opened from the Dev UI session list — **New session** creates a separate session with no `customer_id` (see [Playbook §8](playbook.md#session-identity-playbook-8)).
 
 Layer 3: `InMemoryRunner` sets the same initial state. Dev UI can set state via **Update state** (`stateDelta` on next run); `bind_customer` is not required.
 

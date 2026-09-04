@@ -81,24 +81,32 @@ Long-term personalization uses `customer_id` in **initial `session.state`** at s
 | Run as Alex | **Another** new session with `{"customer_id": "CUST-1002"}` |
 | Change customer | New session (do not switch mid-session) |
 
-`appName` must equal the selected agent's `name()` (Dev UI dropdown). For §8 that is `demo-memory-personalization`. `userId` is `playbook-user`.
+`appName` must equal the selected agent's `name()` (Dev UI dropdown). For §8 that is `demo-memory-personalization`. `userId` is `user` (ADK Dev UI default).
 
 ```bash
 # Priya (CUST-1001) — Playbook §8.1
-curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/user/sessions" \
   -H "Content-Type: application/json" \
   -d '{"state":{"customer_id":"CUST-1001"}}'
 
 # Alex (CUST-1002) — Playbook §8.2 (new session)
-curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/user/sessions" \
   -H "Content-Type: application/json" \
   -d '{"state":{"customer_id":"CUST-1002"}}'
 
 # Prove state stuck: replace SESSION_ID from the create response.
-curl -s "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions/SESSION_ID"
+curl -s "http://localhost:8000/apps/demo-memory-personalization/users/user/sessions/SESSION_ID"
 ```
 
-Send §8 queries on the returned session id via `/run` or `/run_sse` (or chat in Dev UI on that session). Dev UI alternative: **More options → Update state** with `{"customer_id":"CUST-1001"}` before the first message. `bind_customer` is not required.
+Send §8 queries on the returned session id via `/run` or `/run_sse`, or chat in Dev UI on **that same session** (see below). `bind_customer` is not required.
+
+**Dev UI — curl then chat:** If you curl and then click **New session** in Dev UI, you get a different session with no `customer_id`. To use the curl-created session in Dev UI:
+
+1. Run the curl and note the `id` from the response.
+2. In Dev UI, open that session from the session list (same agent: `demo-memory-personalization`).
+3. Send your message there.
+
+**Dev UI — no curl:** **More options → Update state** with `{"customer_id":"CUST-1001"}` before the first message (same end result).
 
 ### Canonical seed data
 

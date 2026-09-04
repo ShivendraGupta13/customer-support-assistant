@@ -151,15 +151,15 @@ Long-term personalization does **not** infer customer from chat text in Playbook
 **Manual (Playbook §8):** create the session with initial state via REST (confirmed against `google-adk-dev` **1.9.0** `SessionController` / `SessionRequest` — see `tasks/plan.md` → Spike findings):
 
 ```bash
-# 1. Create session for Priya (appName = selected agent's name() / Dev UI dropdown)
-curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/playbook-user/sessions" \
+# 1. Create session for Priya (appName = selected agent's name() / Dev UI dropdown; userId = Dev UI default)
+curl -s -X POST "http://localhost:8000/apps/demo-memory-personalization/users/user/sessions" \
   -H "Content-Type: application/json" \
   -d '{"state": {"customer_id": "CUST-1001"}}'
 
 # 2. Send §8.1 query on the returned session id via /run or /run_sse
 ```
 
-**Web UI:** New Session does not accept custom initial state. Use **More options → Update state** to set `{"customer_id":"CUST-1001"}` before the first message (applied as `stateDelta`), or use the REST curl above. `bind_customer` is **not** required (Task 2 spike).
+**Web UI:** New Session does not accept custom initial state. Use **More options → Update state** to set `{"customer_id":"CUST-1001"}` before the first message (applied as `stateDelta`), or use the REST curl above and open that session in Dev UI (do not click **New session** afterward — that creates a separate session with no `customer_id`; see [Playbook §8](playbook.md#session-identity-playbook-8)). `bind_customer` is **not** required (Task 2 spike).
 
 **Layer 3 tests:** `InMemoryRunner` sets the same initial state programmatically — no special-case agent code.
 
