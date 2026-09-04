@@ -21,3 +21,4 @@ credentials.json
 
 # Logs
 *.log
+docs/adk-concepts.md

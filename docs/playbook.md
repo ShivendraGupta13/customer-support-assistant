@@ -159,6 +159,10 @@ One trace per turn, containing a model-call span and a tool-call span for step 1
 | 1    | *"Investigate order ORD-5001 and tell me what's going on."* | Response walks through: order details → payment status → shipment tracking → relevant policy (shipping delay) → a proposed resolution. Sub-steps run in the fixed order gather→policy-check→draft, visible as sequential spans in Langfuse, each stage's output referencing the prior stage's output (`outputKey` chaining). |
 | 2    | *"Investigate order ORD-9999."* (non-existent)              | Tool returns a "not found" result; the agent reports the order doesn't exist rather than crashing or hallucinating an investigation. This is the retry/error-recovery check — confirm in Langfuse the tool span shows an error/empty result and the pipeline still completes with a graceful final response.                 |
 
+> [!TIP]
+> **Multi-Turn Context & Model Capacity**: When running Step 1 and Step 2 sequentially in the **same session**, Google ADK passes prior turn events (`[policy_check]` and `[draft]` outputs) into `gather`'s context. Smaller models like `qwen2.5:7b` may suffer from context confusion/hallucination across turns and bypass the `order_lookup` tool. Production-grade models such as `gemini-2.0-flash` or higher handle multi-turn tool-calling and context separation reliably. Alternatively, click **`+ New Session`** when evaluating with local 7B models.
+
+
 
 
 
