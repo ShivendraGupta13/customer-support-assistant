@@ -149,4 +149,78 @@ class SequentialInvestigationEvalTest {
     assertThat(finalText).containsIgnoringCase("ORD-9999");
     assertThat(finalText).containsIgnoringCase("could not find");
   }
+
+  @Test
+  void layer3_secondInvestigateInSameSessionUsesNewOrderNotPriorFacts() {
+    ScriptedLlm gatherLlm =
+        ScriptedLlm.of(
+            ScriptedLlm.text(
+                "Order ORD-5001 DELAYED; payment CAPTURED 129.99; shipment SHP-7001 IN_TRANSIT_DELAYED 6 days."),
+            ScriptedLlm.text("Order ORD-9999 was not found."));
+    ScriptedLlm policyLlm =
+        ScriptedLlm.of(
+            ScriptedLlm.text("Shipping delay policy applies; courtesy hold may apply for GOLD."),
+            ScriptedLlm.text("No policy check applies because the order was not found."));
+    ScriptedLlm draftLlm =
+        ScriptedLlm.of(
+            ScriptedLlm.text(
+                "ORD-5001 is delayed in transit. Per shipping policy we can offer a courtesy update."),
+            ScriptedLlm.text("I could not find order ORD-9999 in our records."));
+
+    com.poc.adk.tools.PolicyRetrievalTool retrievalTool =
+        policyRetrievalTool != null ? policyRetrievalTool : new com.poc.adk.tools.PolicyRetrievalTool(null);
+    SequentialAgent agent =
+        SequentialInvestigationAgent.create(
+            gatherLlm,
+            policyLlm,
+            draftLlm,
+            orderLookupTool,
+            paymentHistoryTool,
+            shipmentTrackingTool,
+            retrievalTool,
+            auditService);
+    InMemoryRunner runner = new InMemoryRunner(agent);
+    Session session =
+        runner.sessionService().createSession(agent.name(), "playbook-user").blockingGet();
+
+    runner
+        .runAsync(
+            "playbook-user",
+            session.id(),
+            Content.fromParts(
+                Part.fromText("Investigate order ORD-5001 and tell me what's going on.")))
+        .toList()
+        .blockingGet();
+
+    List<Event> secondTurn =
+        runner
+            .runAsync(
+                "playbook-user",
+                session.id(),
+                Content.fromParts(Part.fromText("Investigate order ORD-9999.")))
+            .toList()
+            .blockingGet();
+
+    Session after =
+        runner
+            .sessionService()
+            .getSession(agent.name(), "playbook-user", session.id(), java.util.Optional.empty())
+            .blockingGet();
+    String facts = String.valueOf(after.state().get("investigation_facts"));
+    assertThat(facts).contains("ORD-9999");
+    assertThat(facts).doesNotContain("ORD-5001");
+
+    assertThat(gatherLlm.requests()).hasSizeGreaterThanOrEqualTo(2);
+    String secondGatherContents = gatherLlm.requests().get(1).contents().toString();
+    assertThat(secondGatherContents).doesNotContain("ORD-5001");
+
+    String finalText =
+        secondTurn.stream()
+            .filter(Event::finalResponse)
+            .map(Event::stringifyContent)
+            .reduce((a, b) -> b)
+            .orElse("");
+    assertThat(finalText).containsIgnoringCase("ORD-9999");
+    assertThat(finalText).containsIgnoringCase("could not find");
+  }
 }
