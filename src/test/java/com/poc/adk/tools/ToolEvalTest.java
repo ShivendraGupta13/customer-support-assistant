@@ -91,6 +91,9 @@ class ToolEvalTest {
         customerPreferenceTool.customerPreference(toolContextWithCustomer("CUST-1001"));
 
     assertThat(result.get("preferred_contact_channel")).isEqualTo("EMAIL");
+    assertThat(result.get("customer_id")).isEqualTo("CUST-1001");
+    assertThat(result.get("email")).isEqualTo("priya.shah@example.com");
+    assertThat(result.get("name")).isEqualTo("Priya Shah");
   }
 
   @Test
@@ -99,6 +102,8 @@ class ToolEvalTest {
         customerPreferenceTool.customerPreference(toolContextWithCustomer("CUST-1002"));
 
     assertThat(result.get("preferred_contact_channel")).isEqualTo("SMS");
+    assertThat(result.get("customer_id")).isEqualTo("CUST-1002");
+    assertThat(result.get("email")).isEqualTo("alex.kim@example.com");
   }
 
   @Test

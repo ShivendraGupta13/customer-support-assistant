@@ -66,6 +66,51 @@ class MemoryPersonalizationEvalTest {
     assertThat(finalText(events)).containsIgnoringCase("SMS");
   }
 
+  @Test
+  void layer3_followUpInSameSessionAnswersCustomerIdNotCannedChannelLine() {
+    ScriptedLlm llm =
+        ScriptedLlm.of(
+            ScriptedLlm.functionCall("customer_preference", Map.of()),
+            ScriptedLlm.text("The best way to reach you is email."),
+            ScriptedLlm.functionCall("customer_preference", Map.of()),
+            ScriptedLlm.text("Your customer id is CUST-1001."));
+
+    LlmAgent agent =
+        MemoryPersonalizationAgent.create(llm, customerPreferenceTool, auditService);
+    InMemoryRunner runner = new InMemoryRunner(agent);
+    Session session =
+        runner
+            .sessionService()
+            .createSession(
+                agent.name(),
+                "playbook-user",
+                Map.of("customer_id", "CUST-1001"),
+                "session-CUST-1001-followup")
+            .blockingGet();
+
+    runner
+        .runAsync(
+            "playbook-user",
+            session.id(),
+            Content.fromParts(Part.fromText(USER_MESSAGE)))
+        .toList()
+        .blockingGet();
+
+    List<Event> followUp =
+        runner
+            .runAsync(
+                "playbook-user",
+                session.id(),
+                Content.fromParts(Part.fromText("what's my customer id")))
+            .toList()
+            .blockingGet();
+
+    assertCustomerPreferenceCalled(followUp);
+    String reply = finalText(followUp);
+    assertThat(reply).contains("CUST-1001");
+    assertThat(reply).doesNotContain("The best way to reach you is email");
+  }
+
   private static List<Event> run(LlmAgent agent, String customerId) {
     InMemoryRunner runner = new InMemoryRunner(agent);
     Session session =

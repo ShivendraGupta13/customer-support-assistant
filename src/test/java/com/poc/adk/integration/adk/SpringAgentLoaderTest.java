@@ -109,7 +109,7 @@ class SpringAgentLoaderTest {
 
     @Bean
     CustomerPreferenceTool customerPreferenceTool() {
-      return new CustomerPreferenceTool(null);
+      return new CustomerPreferenceTool(null, null);
     }
 
     @Bean

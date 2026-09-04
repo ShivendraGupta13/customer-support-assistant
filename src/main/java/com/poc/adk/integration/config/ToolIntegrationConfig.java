@@ -1,6 +1,7 @@
 package com.poc.adk.integration.config;
 
 import com.poc.adk.commerce.customer.CustomerPreferenceRepository;
+import com.poc.adk.commerce.customer.CustomerRepository;
 import com.poc.adk.commerce.order.OrderRepository;
 import com.poc.adk.commerce.payment.PaymentRepository;
 import com.poc.adk.commerce.shipment.ShipmentRepository;
@@ -38,8 +39,9 @@ public class ToolIntegrationConfig {
   }
 
   @Bean
-  CustomerPreferenceTool customerPreferenceTool(CustomerPreferenceRepository preferences) {
-    return new CustomerPreferenceTool(preferences);
+  CustomerPreferenceTool customerPreferenceTool(
+      CustomerPreferenceRepository preferences, CustomerRepository customers) {
+    return new CustomerPreferenceTool(preferences, customers);
   }
 
   @Bean
