@@ -230,7 +230,7 @@ Switch `llm.provider` when Langfuse shows correct tools/retrieval but prose or r
 
 ## RAG Indexing
 
-Spec-level contracts so Architecture does not invent a different retrieval story. Implementation details (Qdrant collection names, vector sizes, RRF `k`) stay in Architecture.
+Spec-level contracts so Architecture does not invent a different retrieval story. Implementation details (Qdrant collection names, vector sizes, RRF `k`) stay in Architecture. For a readable end-to-end guide (chunking → Qdrant client → dense/BM25/hybrid), see [rag-and-qdrant.md](rag-and-qdrant.md).
 
 ### Chunking strategy
 

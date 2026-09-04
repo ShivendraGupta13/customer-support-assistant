@@ -252,6 +252,8 @@ erDiagram
 
 ### 4.2 Qdrant collections
 
+See [rag-and-qdrant.md](rag-and-qdrant.md) for a full walkthrough of chunking, indexing, dense/BM25/hybrid search, and the Java client. Summary below.
+
 One collection. Semantic memory in this POC **is** that collection — the four policy files are the facts / business rules (Playbook §7). There is no second Qdrant corpus and no `semantic_memory` collection. Playbook §8 (customer preferences) is H2 by `customer_id` from `session.state`, not vector similarity.
 
 

@@ -112,6 +112,7 @@ graph TD
 2. Navigate to [http://localhost:6333/dashboard](http://localhost:6333/dashboard) — no credentials required (REST `:6333`, gRPC `:6334`).
 3. Inspect the `policy_chunks` collection: vector counts, payload points, indexed policy documents, and hybrid search.
 4. REST API status: [http://localhost:6333/collections](http://localhost:6333/collections).
+5. For dense vs BM25 vs hybrid search concepts and verification, see [docs/rag-and-qdrant.md](docs/rag-and-qdrant.md).
 
 #### 📊 Langfuse Observability UI
 1. Ensure Docker Compose is up (`docker compose up -d`).
@@ -199,5 +200,6 @@ This repository strictly adheres to **Andrej Karpathy's Coding Guidelines** and 
 
 - **Requirements & Specification**: [docs/spec.md](docs/spec.md)
 - **Manual Test Scenarios (Playbook)**: [docs/playbook.md](docs/playbook.md)
+- **RAG & Qdrant (retrieval guide)**: [docs/rag-and-qdrant.md](docs/rag-and-qdrant.md)
 - **Task & Implementation Plan**: [tasks/plan.md](tasks/plan.md)
 - **Agent Rules & Guidelines**: [AGENTS.md](AGENTS.md)

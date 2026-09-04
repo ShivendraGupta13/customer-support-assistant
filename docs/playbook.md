@@ -241,7 +241,7 @@ Same queries via `InMemoryRunner`; assert confirmation event fires, then program
 
 **POC topics:** RAG (retrieval, embeddings, vector store, hybrid search, context injection, citation), Semantic Memory (facts / business rules / policy knowledge).
 
-**Architecture:** D7, D8 (semantic portion), D9, D10.
+**Architecture:** D7, D8 (semantic portion), D9, D10. Implementation guide: [rag-and-qdrant.md](rag-and-qdrant.md).
 
 **Chunking contract** (from `spec.md`): split on `##` / `###`, cap ~400 tokens, ~50-token overlap on oversized sections, cite via `source_path` + `section_heading`.
 
@@ -252,6 +252,8 @@ Same queries via `InMemoryRunner`; assert confirmation event fires, then program
 | 2    | *"What's your policy on late deliveries AND can I get a refund for that?"* | Answer pulls from **both** `shipping-policy.md` and `refund-policy.md`. This is **multi-chunk / multi-document** retrieval — not hybrid search. Top-1-only would fail.                                                                                                                                                                                                          |
 | 3    | *"Does exception code NW-SHIP-EXC-04 apply to SKU NW-HP-1001?"*            | Answer is **yes**, courtesy weather-hold refund for GOLD, and cites the **loyalty** courtesy-codes section — **not** `shipping-policy.md`. This is the **hybrid search** check: those tokens exist only in `loyalty-policy.md`; shipping-policy weather prose is the dense distractor. Langfuse / retrieval span should show the loyalty chunk ranked above the shipping chunk. |
 | 4    | *"What's your policy on interstellar shipping?"* (not in any policy doc)   | Answer says this isn't covered by policy rather than fabricating one — hallucination-mitigation check on top of RAG.                                                                                                                                                                                                                                                            |
+
+To compare **dense vs BM25 vs hybrid** on these queries without the LLM, see [rag-and-qdrant.md § Verification](rag-and-qdrant.md#10-verification) and run `mvn test -Dtest=RetrievalEvalTest`.
 
 
 
